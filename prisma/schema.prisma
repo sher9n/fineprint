@@ -1,0 +1,263 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============ AUTH ============
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  isAdmin       Boolean   @default(false)
+
+  accounts Account[]
+  sessions Session[]
+  votes    Vote[]
+  bets     Bet[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============ DOMAIN ============
+model Market {
+  id               String    @id
+  conditionId      String    @unique
+  slug             String
+  question         String
+  description      String    @db.Text
+  resolutionSource String?
+  endDate          DateTime?
+  startDate        DateTime?
+  liquidity        Float     @default(0)
+  volume           Float     @default(0)
+  outcomes         String    @db.Text
+  outcomePrices    String    @db.Text
+  yesPrice         Float?
+  noPrice          Float?
+  active           Boolean   @default(true)
+  closed           Boolean   @default(false)
+  imageUrl         String?
+  eventTitle       String?
+  eventSlug        String?
+  groupItemTitle   String?
+  negRiskMarketId  String?
+  rulesHash        String
+  firstSeenAt      DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  lastIngestedAt   DateTime  @default(now())
+  verifyFailures   Int       @default(0)
+
+  analyses         Analysis[]
+  bets             Bet[]
+  deepResearchJobs DeepResearchJob[]
+
+  @@index([endDate])
+  @@index([liquidity])
+  @@index([active, closed])
+}
+
+model Analysis {
+  id        String  @id @default(cuid())
+  marketId  String
+  market    Market  @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  rulesHash String
+
+  pass  String
+  model String
+
+  vibeInterpretation     String  @db.Text
+  literalInterpretation  String  @db.Text
+  divergenceType         String
+  divergenceScore        Int
+  edgeDirection          String
+  ruleImpliedProbability Float?
+  expectedYesPayoutCents Float?
+  expectedNoPayoutCents  Float?
+  verificationSteps      String? @db.Text
+  reasoning              String  @db.Text
+  sourceFindings         String? @db.Text
+
+  yesPriceAtAnalysis  Float?
+  noPriceAtAnalysis   Float?
+  liquidityAtAnalysis Float?
+  edgeScore           Float
+  betSide             String   @default("NONE")
+  priceGap            Float?
+  directionAgreement  Boolean  @default(true)
+
+  costUsd             Float @default(0)
+  inputTokens         Int   @default(0)
+  outputTokens        Int   @default(0)
+  cacheReadTokens     Int   @default(0)
+  cacheCreationTokens Int   @default(0)
+
+  createdAt DateTime @default(now())
+
+  votes Vote[]
+
+  @@index([marketId, createdAt])
+  @@index([edgeScore])
+  @@index([divergenceScore])
+}
+
+model Vote {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysisId String
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  marketId   String
+  direction  Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, marketId])
+  @@index([analysisId])
+  @@index([marketId])
+}
+
+model Bet {
+  id         String    @id @default(cuid())
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  marketId   String
+  market     Market    @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  analysisId String?
+  side       String
+  priceAtBet Float
+  sizeUsd    Float
+  rationale  String?   @db.Text
+  status     String    @default("open")
+  pnlUsd     Float?
+  auto       Boolean   @default(false)
+  placedAt   DateTime  @default(now())
+  resolvedAt DateTime?
+
+  @@index([userId, placedAt])
+}
+
+model Settings {
+  id                          Int      @id @default(1)
+  autoTradeEnabled            Boolean  @default(false)
+  batchModeEnabled            Boolean  @default(true)
+  firstPassModel              String   @default("sonnet")
+  haikuConcurrency            Int      @default(5)
+  dailyBudgetUsd              Float    @default(20.0)
+  minDivergenceScore          Int      @default(6)
+  minLiquidityUsd             Float    @default(5000)
+  minDaysToEnd                Int      @default(2)
+  maxDaysToEnd                Int      @default(120)
+  deepResearchAutoEnabled     Boolean  @default(true)
+  dailyDeepResearchBudgetUsd  Float    @default(50.0)
+  updatedAt                   DateTime @updatedAt
+}
+
+model DeepResearchJob {
+  id                String    @id @default(cuid())
+  marketId          String
+  market            Market    @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  openaiResponseId  String    @unique
+  model             String
+  status            String    @default("queued")
+  rulesHashAtSubmit String
+  costUsd           Float     @default(0)
+  inputTokens       Int       @default(0)
+  outputTokens      Int       @default(0)
+  errorMessage      String?   @db.Text
+  submittedAt       DateTime  @default(now())
+  lastPolledAt      DateTime?
+  completedAt       DateTime?
+
+  @@index([status])
+  @@index([marketId, submittedAt])
+}
+
+model BatchJob {
+  id                String    @id @default(cuid())
+  anthropicBatchId  String    @unique
+  status            String    @default("submitted")
+  purpose           String    @default("first_pass")
+  marketIds         String    @db.Text
+  totalRequests     Int
+  succeededRequests Int       @default(0)
+  failedRequests    Int       @default(0)
+  costUsd           Float     @default(0)
+  errors            String?   @db.Text
+  submittedAt       DateTime  @default(now())
+  endedAt           DateTime?
+
+  @@index([status])
+}
+
+model CostLog {
+  id                  String   @id @default(cuid())
+  dateIst             String
+  model               String
+  purpose             String
+  inputTokens         Int      @default(0)
+  outputTokens        Int      @default(0)
+  cacheReadTokens     Int      @default(0)
+  cacheCreationTokens Int      @default(0)
+  costUsd             Float
+  createdAt           DateTime @default(now())
+
+  @@index([dateIst])
+}
+
+model IngestRun {
+  id              String    @id @default(cuid())
+  kind            String    @default("ingest")
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  marketsAdded    Int       @default(0)
+  marketsUpdated  Int       @default(0)
+  marketsAnalyzed Int       @default(0)
+  haikuCalls      Int       @default(0)
+  opusCalls       Int       @default(0)
+  totalCostUsd    Float     @default(0)
+  errors          String?   @db.Text
+  status          String    @default("running")
+}

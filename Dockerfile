@@ -29,4 +29,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+# Invoke prisma's CLI directly. The `.bin/prisma` symlink isn't preserved across docker
+# COPY stages, so `npx prisma` fails with "prisma: not found" at runtime — call the underlying
+# build artifact instead, which is guaranteed to be where we copied it.
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node server.js"]

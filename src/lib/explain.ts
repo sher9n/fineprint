@@ -171,19 +171,24 @@ export function timeAgo(d: Date | string | null | undefined): string | null {
   return `${Math.floor(months / 12)}y ago`;
 }
 
+// Polymarket's `endDate` is the trading cutoff (when the orderbook closes), NOT the rules
+// deadline. For grouped markets the gap is often weeks: e.g., the "June 30" outcome in a
+// peace-deal series has endDate=May 31 because that's when the prior sibling's deadline hits.
+// Labeling that as "resolves in 4d" misleads bettors into thinking they have 4 days of upside
+// when in fact they have 4 days of trading and a month of frozen position.
 export function humanizeTimeRemaining(endDate: Date | string | null | undefined): string {
-  if (!endDate) return "no deadline";
+  if (!endDate) return "no trading deadline";
   const d = typeof endDate === "string" ? new Date(endDate) : endDate;
   const ms = d.getTime() - Date.now();
   if (ms < 0) {
     const ago = Math.abs(ms);
-    if (ago < 86400000) return `closed ${Math.round(ago / 3600000)}h ago`;
-    return `closed ${Math.round(ago / 86400000)}d ago`;
+    if (ago < 86400000) return `trading closed ${Math.round(ago / 3600000)}h ago`;
+    return `trading closed ${Math.round(ago / 86400000)}d ago`;
   }
   const hours = ms / 3600000;
-  if (hours < 1) return `resolves in ${Math.round(ms / 60000)}m`;
-  if (hours < 48) return `resolves in ${Math.round(hours)}h`;
+  if (hours < 1) return `trading ends in ${Math.round(ms / 60000)}m`;
+  if (hours < 48) return `trading ends in ${Math.round(hours)}h`;
   const days = hours / 24;
-  if (days < 60) return `resolves in ${Math.round(days)}d`;
-  return `resolves in ${Math.round(days / 30)}mo`;
+  if (days < 60) return `trading ends in ${Math.round(days)}d`;
+  return `trading ends in ${Math.round(days / 30)}mo`;
 }

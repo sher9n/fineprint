@@ -111,7 +111,7 @@ export default function Home() {
               { value: "edge", label: "Score ↓" },
               { value: "divergence", label: "Mismatch ↓" },
               { value: "votes", label: "Most voted" },
-              { value: "endDate", label: "Resolves soon" },
+              { value: "endDate", label: "Trading ends soon" },
               { value: "liquidity", label: "Most liquid" },
               { value: "recent", label: "Recently found" },
             ]} />

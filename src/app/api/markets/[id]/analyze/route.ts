@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { analyzeAndStore } from "@/lib/analyzer";
 import { auth } from "@/lib/auth";
 import { remainingBudgetUsd } from "@/lib/budget";
+import { LLMDisabledError } from "@/lib/llm-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     return NextResponse.json({ ok: true, analysis: a });
   } catch (err) {
+    if (err instanceof LLMDisabledError) {
+      return NextResponse.json({ ok: false, error: err.message }, { status: 503 });
+    }
     console.error(`[/api/markets/${id}/analyze] failed:`, err);
     return NextResponse.json({ ok: false, error: `Internal error: ${String(err).slice(0, 200)}` }, { status: 500 });
   }

@@ -3,6 +3,7 @@ import { anthropic, HAIKU_MODEL, VERIFIER_MODEL, extractUsage, resolveFirstPassM
 import { logCost, WEB_SEARCH_COST_PER_CALL, remainingBudgetUsd } from "./budget";
 import { computeEdge } from "./scoring";
 import { AnalysisSchema, SYSTEM_PROMPT, buildUserMessage, tryParseJson } from "./analyzer";
+import { llmCallsEnabled, LLMDisabledError } from "./llm-gate";
 import type { Market } from "@prisma/client";
 
 const BATCH_DISCOUNT = 0.5;
@@ -132,6 +133,7 @@ Format STRICTLY: source_findings + steelman BEFORE the separator. JSON ONLY afte
 }
 
 export async function submitHaikuBatch(markets: Market[], opts: { purpose?: string; model?: string } = {}): Promise<string> {
+  if (!llmCallsEnabled()) throw new LLMDisabledError();
   if (markets.length === 0) throw new Error("no markets to submit");
   const client = anthropic();
 
@@ -169,6 +171,7 @@ export async function submitHaikuBatch(markets: Market[], opts: { purpose?: stri
 const VERIFIER_COST_ESTIMATE_PER_MARKET = 0.30;
 
 export async function submitVerifierBatch(markets: Market[], opts: { purpose?: string } = {}): Promise<string> {
+  if (!llmCallsEnabled()) throw new LLMDisabledError();
   if (markets.length === 0) throw new Error("no markets to submit");
   const remaining = await remainingBudgetUsd();
   const estimated = markets.length * VERIFIER_COST_ESTIMATE_PER_MARKET;

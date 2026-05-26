@@ -4,6 +4,7 @@ import { anthropic, HAIKU_MODEL, VERIFIER_MODEL, extractUsage, withRetry, resolv
 import { logCost, remainingBudgetUsd, WEB_SEARCH_COST_PER_CALL } from "./budget";
 import { prefilter } from "./prefilter";
 import { computeEdge } from "./scoring";
+import { llmCallsEnabled, LLMDisabledError } from "./llm-gate";
 import type { Market } from "@prisma/client";
 
 export const AnalysisSchema = z.object({
@@ -350,6 +351,7 @@ export function tryParseJson(text: string): unknown {
 }
 
 export async function runHaikuAnalysis(market: Market, modelOverride?: string): Promise<{ analysis: AnalysisJson; usage: ReturnType<typeof extractUsage>; costUsd: number; model: string } | null> {
+  if (!llmCallsEnabled()) throw new LLMDisabledError();
   const client = anthropic();
   const remaining = await remainingBudgetUsd();
   if (remaining <= 0.02) return null;
@@ -392,6 +394,7 @@ export async function runHaikuAnalysis(market: Market, modelOverride?: string): 
 }
 
 export async function runOpusAnalysis(market: Market): Promise<{ analysis: AnalysisJson; sourceFindings: string; usage: ReturnType<typeof extractUsage>; costUsd: number; webSearches: number } | null> {
+  if (!llmCallsEnabled()) throw new LLMDisabledError();
   const client = anthropic();
   const remaining = await remainingBudgetUsd();
   if (remaining <= 0.1) return null;
@@ -515,6 +518,9 @@ export async function analyzeAndStore(market: Market, pass: "haiku" | "opus") {
 }
 
 export async function runAnalysisPass(opts: { maxMarkets?: number; maxVerify?: number } = {}) {
+  // Bail out cleanly when LLM is disabled rather than letting every per-market worker throw
+  // and spam the log. The caller can convert this to a clean HTTP 503.
+  if (!llmCallsEnabled()) throw new LLMDisabledError();
   const settings = await prisma.settings.findUnique({ where: { id: 1 } });
   const minLiq = settings?.minLiquidityUsd ?? 5000;
   const concurrency = Math.max(1, Math.min(10, settings?.haikuConcurrency ?? 5));

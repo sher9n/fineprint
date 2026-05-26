@@ -3,6 +3,7 @@ import { anthropic, VERIFIER_MODEL, extractUsage, withRetry } from "./anthropic"
 import { AnalysisSchema, buildUserMessage, SYSTEM_PROMPT, tryParseJson, type AnalysisJson } from "./analyzer";
 import { logCost, remainingBudgetUsd } from "./budget";
 import { computeEdge } from "./scoring";
+import { llmCallsEnabled } from "./llm-gate";
 import type { Market, Analysis } from "@prisma/client";
 
 const SYNTHESIS_THRESHOLD_USD = 0.15;
@@ -43,6 +44,9 @@ ${steps}`;
  * (missing prerequisites, budget, parse failure).
  */
 export async function runSynthesis(market: Market): Promise<Analysis | null> {
+  // Called from the deep-research poll loop as a side-effect of completion; return null silently
+  // when LLM is disabled so the poll itself doesn't break (it just won't produce a synthesis row).
+  if (!llmCallsEnabled()) return null;
   const opusAnalysis = await prisma.analysis.findFirst({
     where: { marketId: market.id, pass: "opus", rulesHash: market.rulesHash },
     orderBy: { createdAt: "desc" },

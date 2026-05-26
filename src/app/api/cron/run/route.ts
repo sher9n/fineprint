@@ -5,6 +5,7 @@ import { ensureSettings } from "@/lib/bootstrap";
 import { prisma } from "@/lib/prisma";
 import { pickMarketsForBatch, submitHaikuBatch } from "@/lib/batch";
 import { requireAdmin } from "@/lib/admin";
+import { LLMDisabledError, llmCallsEnabled } from "@/lib/llm-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,11 @@ export const maxDuration = 800;
 export async function POST() {
   const gate = await requireAdmin();
   if (!gate.ok) return NextResponse.json({ error: gate.reason }, { status: gate.status });
+  // Fail fast: this endpoint runs a 5+ minute ingest before reaching any LLM call. Without this
+  // upfront check, curl would time out before getting the LLM-disabled error.
+  if (!llmCallsEnabled()) {
+    return NextResponse.json({ ok: false, error: new LLMDisabledError().message }, { status: 503 });
+  }
   await ensureSettings();
   const settings = await prisma.settings.findUnique({ where: { id: 1 } });
   const useBatch = settings?.batchModeEnabled === true;
@@ -48,6 +54,9 @@ export async function POST() {
       where: { id: run.id },
       data: { finishedAt: new Date(), status: "error", errors: String(err) },
     });
+    if (err instanceof LLMDisabledError) {
+      return NextResponse.json({ ok: false, error: err.message }, { status: 503 });
+    }
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
   }
 }

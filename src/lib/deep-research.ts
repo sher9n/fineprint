@@ -4,6 +4,7 @@ import { AnalysisSchema, buildUserMessage, SYSTEM_PROMPT, tryParseJson, type Ana
 import { logCost, remainingDeepResearchBudgetUsd } from "./budget";
 import { computeEdge } from "./scoring";
 import { runSynthesis } from "./synthesis";
+import { llmCallsEnabled, LLMDisabledError } from "./llm-gate";
 import type { Market, DeepResearchJob } from "@prisma/client";
 
 const SUBMIT_THRESHOLD_USD = 1.5;
@@ -77,6 +78,7 @@ function extractText(env: ResponseEnvelope): string {
  * (no re-runs in v1), or if there's an in-flight job for it (no double-submit).
  */
 export async function submitDeepResearch(market: Market): Promise<DeepResearchJob> {
+  if (!llmCallsEnabled()) throw new LLMDisabledError();
   const existingAnalysis = await prisma.analysis.findFirst({
     where: { marketId: market.id, pass: "gpt_deep", rulesHash: market.rulesHash },
     select: { id: true },

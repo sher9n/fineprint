@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { submitDeepResearch } from "@/lib/deep-research";
+import { LLMDisabledError } from "@/lib/llm-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       },
     });
   } catch (err) {
+    if (err instanceof LLMDisabledError) {
+      return NextResponse.json({ ok: false, error: err.message }, { status: 503 });
+    }
     const msg = String(err instanceof Error ? err.message : err);
     const status = msg.includes("budget") ? 402 : msg.includes("already") ? 409 : 500;
     return NextResponse.json({ ok: false, error: msg }, { status });

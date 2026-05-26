@@ -1,5 +1,6 @@
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { IST_TZ } from "./time";
+import { llmCallsEnabled } from "./llm-gate";
 
 function nextRunMs(hourIst: number): number {
   const todayIstDate = formatInTimeZone(new Date(), IST_TZ, "yyyy-MM-dd");
@@ -16,6 +17,10 @@ let pollRunning = false;
 let deepResearchPollRunning = false;
 
 async function fireDailyRun() {
+  if (!llmCallsEnabled()) {
+    console.log("[scheduler] daily run skipped: LLM_DISABLED is set");
+    return;
+  }
   if (dailyRunning) {
     console.log("[scheduler] daily run skipped: previous run still in progress");
     return;
@@ -79,6 +84,7 @@ async function fireDailyRun() {
 }
 
 async function fireBatchPoll() {
+  if (!llmCallsEnabled()) return; // silent: this runs every 5 min, would spam logs
   if (pollRunning) {
     console.log("[scheduler] batch poll skipped: previous poll still in progress");
     return;
@@ -110,6 +116,7 @@ async function fireBatchPoll() {
 }
 
 async function fireDeepResearchPoll() {
+  if (!llmCallsEnabled()) return; // silent: every 60s, would spam logs
   if (deepResearchPollRunning) return;
   deepResearchPollRunning = true;
   try {

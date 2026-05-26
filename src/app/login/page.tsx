@@ -35,7 +35,8 @@ function LoginPageInner() {
     setBusy(true);
     setError(null);
     try {
-      // Dev bypass: this email skips the magic link entirely (only works when NODE_ENV !== production)
+      // Dev bypass: this email skips the magic link locally (NODE_ENV !== production). In
+      // production the /api/dev-login route 403s, so we silently fall through to Resend.
       if (cleanEmail === "sherancorera@gmail.com") {
         const res = await fetch("/api/dev-login", {
           method: "POST",
@@ -46,10 +47,8 @@ function LoginPageInner() {
           window.location.href = callbackUrl;
           return;
         }
-        const data = await res.json().catch(() => ({}));
-        setError(data.error || "Dev login failed");
-        setBusy(false);
-        return;
+        // 403 in production is expected — fall through to the magic link path below.
+        // Any other failure is also fine to retry via Resend.
       }
       await signIn("resend", { email: cleanEmail, callbackUrl, redirect: true });
     } catch (err) {

@@ -587,8 +587,8 @@ export default function MarketDetailPage() {
               Each model worked on this market independently. The synthesis above is Opus reconciling these two reports.
             </p>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ModelEvidencePanel label="Opus (web-search verifier)" analysis={opusAnalysis} accent="green" />
-              <ModelEvidencePanel label="GPT deep-research" analysis={gptAnalysis} accent="purple" />
+              <ModelEvidencePanel label="Opus (market-aware verifier)" analysis={opusAnalysis} accent="green" />
+              <ModelEvidencePanel label="GPT deep-research (independent fact-finder)" analysis={gptAnalysis} accent="purple" />
             </div>
           </div>
         )}

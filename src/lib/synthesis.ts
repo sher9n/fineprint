@@ -64,36 +64,45 @@ export async function runSynthesis(market: Market): Promise<Analysis | null> {
 
   const userPrompt = `${buildUserMessage(market)}
 
-Two independent analyses have already been done on this market. Your job is to SYNTHESIZE them into a final verdict.
+Two independent analyses have been done on this market, with deliberately asymmetric inputs:
 
-${summarizeAnalysisForSynthesis("OPUS (Claude, web-search verifier)", opusAnalysis)}
+OPUS — market-aware analyst. Saw the market price, sibling markets in the same event, sibling markets in the same negRisk group, recently resolved similar markets, and the full prediction-market lore (UMA disputes, resolver track record, "Other" fallback conventions, negRisk joint-probability math). Strength: recognising when textual divergence is NOT actionable mispricing because the crowd or the resolver has already corrected for it.
 
-${summarizeAnalysisForSynthesis("GPT (OpenAI deep-research)", gptAnalysis)}
+GPT (deep-research) — fact-finder, market-blind. Did NOT see the market price, sibling markets, or any betting-aggregator data. Researched only primary sources (the named resolution source, government and regulatory sites, primary journalism). Strength: independent factual world-state — what has actually happened, what the named source is currently reporting, what the underlying event looks like before anyone has priced it.
 
-Your synthesis must:
-1. Identify where the two analyses AGREE (same edge_direction, similar divergence_score, similar interpretation).
-2. Identify where they DISAGREE, and explain which side is more credible and why. Cite specifics from each.
-3. Produce a final verdict that is YOUR considered judgment, not just a vote-count of the two.
-4. If the two analyses disagree on edge_direction, the divergence_score in your output should drop (max 5) unless you can clearly explain why one is wrong.
-5. Be honest about uncertainty. If both analyses identified weak evidence, say so.
+Disagreement between them is informative, not noise. Two patterns to recognise:
 
-In the source_findings paragraph (3-6 sentences), briefly summarize what the synthesis revealed about agreement and disagreement.
+A. FACTUAL disagreement. GPT has found a primary-source fact (the named source already published a result, the deadline-relevant event has already occurred per AP, the eligibility precondition fails per court record) that Opus's market-aware reading missed or under-weighted. Favor GPT. The crowd or your prior may simply be wrong.
 
-Then the JSON. Use this schema:
+B. STRUCTURAL / INTERPRETIVE disagreement. Opus has anchored on a resolver precedent, sibling-market pricing consistency, or a platform-specific convention (UMA dispute behavior, "Other" fallback firing rate, negRisk joint sum) that GPT did not have access to. Favor Opus. GPT's textual reading is correct in the abstract but the resolver does not operate that way.
+
+${summarizeAnalysisForSynthesis("OPUS (market-aware analyst)", opusAnalysis)}
+
+${summarizeAnalysisForSynthesis("GPT (fact-finder, market-blind)", gptAnalysis)}
+
+YOUR TASK
+
+1. State whether Opus and GPT agree on edge_direction and roughly agree on divergence_score.
+2. If they disagree, classify the disagreement as FACTUAL (favor GPT) or STRUCTURAL (favor Opus) and explain which specific piece of evidence is decisive. Reference source_findings or reasoning from each by name.
+3. If they agree, combine the strongest claim from each: typically Opus's market-structural reading plus GPT's factual world-state.
+4. Produce your final verdict. The divergence_score in your output is your judgment of the actionable gap given all the evidence — not a vote count, not an auto-cap on disagreement. An asymmetric disagreement that you have classified is often a HIGHER-confidence signal than naive agreement on a textual reading.
+5. Be honest about uncertainty. If neither analysis surfaced strong evidence, say so and score conservatively.
+
+source_findings: 4 to 7 sentences. Lead with whether Opus and GPT agreed; if they disagreed, lead with how you classified the disagreement and which side won. Cite specific claims from each. Mention the most decisive piece of evidence.
+
+Then the literal separator "---JSON---" on its own line, then a single JSON object:
 {
-  "vibe_interpretation": string,
-  "literal_interpretation": string,
-  "divergence_type": "date_bound" | "threshold" | "ambiguous_source" | "specific_event" | "definition_gap" | "none" | "other",
-  "divergence_score": integer 0-10,
-  "edge_direction": "YES" | "NO" | "NONE",
-  "rule_implied_probability": number 0-1 or null,
-  "expected_yes_payout_cents": number 0-100 or null,
-  "expected_no_payout_cents": number 0-100 or null,
-  "reasoning": string,
-  "verification_steps": string[] (max 8)
-}
-
-Format: source_findings paragraph first, then JSON object. Use a clear separator "---JSON---" between them.`;
+  "vibe_interpretation": "<one sentence>",
+  "literal_interpretation": "<one sentence>",
+  "divergence_type": "date_bound | threshold | ambiguous_source | specific_event | definition_gap | none | other",
+  "divergence_score": <integer 0 to 10, your judgment>,
+  "edge_direction": "YES | NO | NONE",
+  "rule_implied_probability": <0 to 1, or null>,
+  "expected_yes_payout_cents": <0 to 100>,
+  "expected_no_payout_cents": <0 to 100>,
+  "reasoning": "<3 to 5 sentences: the gap, the decisive evidence, why you sided with whichever model, what would change your mind>",
+  "verification_steps": ["<concrete check>", "<another>", "<3 to 5 total>"]
+}`;
 
   const res = await withRetry(
     () =>

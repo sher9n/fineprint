@@ -8,15 +8,19 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "auth required" }, { status: 401 });
   if (!session.user.isAdmin) return NextResponse.json({ error: "Deep research is admin-only." }, { status: 403 });
   const { id } = await params;
   const market = await prisma.market.findUnique({ where: { id } });
   if (!market) return NextResponse.json({ error: "Market not found." }, { status: 404 });
+  // ?force=1 lets admins re-run on a market that already has a gpt_deep row for the current
+  // rulesHash. Used after a prompt change to compare old vs new output on the same rules. Still
+  // blocked by the inflight guard inside submitDeepResearch (never double-submit).
+  const force = new URL(req.url).searchParams.get("force") === "1";
   try {
-    const job = await submitDeepResearch(market);
+    const job = await submitDeepResearch(market, { force });
     return NextResponse.json({
       ok: true,
       job: {

@@ -14,6 +14,7 @@ import { Markdown } from "@/components/Markdown";
 import { cn } from "@/lib/utils";
 import { confidenceLabel, divergenceTypeLabel, hasThreeWayStructure, describeBet, humanizeTimeRemaining, stageLabel, solveThreeWay } from "@/lib/explain";
 import { fmtIst } from "@/lib/time";
+import { marketDisplayUrl } from "@/lib/polymarket";
 import { ScenarioBreakdown } from "@/components/ScenarioBreakdown";
 
 interface AnalysisDetail {
@@ -148,15 +149,16 @@ export default function MarketDetailPage() {
     },
   });
 
-  async function triggerDeepResearch() {
+  async function triggerDeepResearch(force = false) {
     if (!session?.user?.isAdmin) {
       toast.error("Admin only");
       return;
     }
     setSubmittingDeep(true);
-    const toastId = toast.loading("Submitting deep-research job to OpenAI...");
+    const toastId = toast.loading(force ? "Re-submitting deep-research job..." : "Submitting deep-research job to OpenAI...");
     try {
-      const res = await fetch(`/api/markets/${id}/deep-research`, { method: "POST" });
+      const url = force ? `/api/markets/${id}/deep-research?force=1` : `/api/markets/${id}/deep-research`;
+      const res = await fetch(url, { method: "POST" });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body.ok) {
         toast.error(body.error || "Failed to submit", { id: toastId });
@@ -258,7 +260,7 @@ export default function MarketDetailPage() {
         ? "agree"
         : "disagree"
       : null;
-  const polymarketUrl = `https://polymarket.com/market/${m.slug}`;
+  const polymarketUrl = marketDisplayUrl(m);
   const displayQuestion = m.eventTitle && m.groupItemTitle ? `${m.eventTitle} — ${m.groupItemTitle}` : m.question;
 
   const drJob = drData?.latestJob ?? null;
@@ -582,7 +584,23 @@ export default function MarketDetailPage() {
         {/* Side-by-side independent evidence (both Opus and GPT exist) */}
         {opusAnalysis && gptAnalysis && (
           <div>
-            <h2 className="text-sm font-medium mb-2 text-[var(--text)]">Independent verdicts</h2>
+            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+              <h2 className="text-sm font-medium text-[var(--text)]">Independent verdicts</h2>
+              {session?.user?.isAdmin && !drInflight && (
+                <button
+                  onClick={() => triggerDeepResearch(true)}
+                  disabled={submittingDeep}
+                  title="Re-run GPT deep-research on the current rules. Use after a prompt change. Cost: $1 to $2."
+                  className="btn btn-ghost btn-sm text-[var(--purple)]"
+                >
+                  {submittingDeep ? (
+                    <><RefreshCw className="w-3 h-3 animate-spin" /> Submitting...</>
+                  ) : (
+                    <><Sparkles className="w-3 h-3" /> Re-run GPT deep-research</>
+                  )}
+                </button>
+              )}
+            </div>
             <p className="text-xs text-[var(--text-muted)] mb-3">
               Each model worked on this market independently. The synthesis above is Opus reconciling these two reports.
             </p>

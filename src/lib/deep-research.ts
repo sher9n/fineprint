@@ -229,16 +229,19 @@ function extractText(env: ResponseEnvelope): string {
  * first-pass and Opus verifier is unaffected.
  *
  * Refuses if the market already has a completed gpt_deep Analysis for the current rulesHash
- * (no re-runs in v1), or if there's an in-flight job for it (no double-submit).
+ * (unless opts.force is set, for admin re-runs after a prompt change), or if there's an
+ * in-flight job for it (always — never double-submit).
  */
-export async function submitDeepResearch(market: Market): Promise<DeepResearchJob> {
+export async function submitDeepResearch(market: Market, opts: { force?: boolean } = {}): Promise<DeepResearchJob> {
   if (!llmCallsEnabled()) throw new LLMDisabledError();
-  const existingAnalysis = await prisma.analysis.findFirst({
-    where: { marketId: market.id, pass: "gpt_deep", rulesHash: market.rulesHash },
-    select: { id: true },
-  });
-  if (existingAnalysis) {
-    throw new Error("This market already has a completed deep-research analysis for the current rules.");
+  if (!opts.force) {
+    const existingAnalysis = await prisma.analysis.findFirst({
+      where: { marketId: market.id, pass: "gpt_deep", rulesHash: market.rulesHash },
+      select: { id: true },
+    });
+    if (existingAnalysis) {
+      throw new Error("This market already has a completed deep-research analysis for the current rules.");
+    }
   }
 
   const existingInflight = await prisma.deepResearchJob.findFirst({

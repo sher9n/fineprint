@@ -11,7 +11,7 @@ import {
   divergenceTypeLabel,
   describeBet,
   hasThreeWayStructure,
-  humanizeTimeRemaining,
+  resolutionTimeline,
   stageLabel,
   timeAgo,
 } from "@/lib/explain";
@@ -137,7 +137,7 @@ export function OpportunityRow(p: RowProps) {
             <div className="text-sm font-medium leading-snug truncate group-hover:text-[var(--accent)] transition-colors">{displayQuestion}</div>
             <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[var(--text-muted)] flex-wrap">
               <Clock className="w-2.5 h-2.5 shrink-0" />
-              <span>{humanizeTimeRemaining(p.endDate)}</span>
+              <span>{resolutionTimeline(p.endDate, p.groupItemTitle)}</span>
               <Dot />
               <span>${(p.liquidity / 1000).toFixed(0)}k liq</span>
               <Dot />

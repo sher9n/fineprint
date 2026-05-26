@@ -171,13 +171,16 @@ export function polymarketUrl(slug: string) {
  * Build the most stable Polymarket URL we can for a given market.
  *
  * The market-level slug rotates: Polymarket appends numeric suffixes after creation, so a slug
- * we ingested yesterday may 307 to /404 today. The event slug doesn't rotate, so for grouped
- * markets we link to `/event/{eventSlug}/{slug}` (Polymarket's canonical form, which still
- * highlights the specific outcome inside the event). If `eventSlug` is missing — true for ~45%
- * of markets in the DB before the fetchMarketById fix — we fall back to `/market/{slug}` and
- * accept that it may sometimes 404.
+ * we ingested yesterday may render as "Oops, we didn't forecast this" today even at the
+ * canonical /event/{eventSlug}/{slug} URL. Worse, the page returns HTTP 200 with an empty-state
+ * payload, so naive curl checks pass.
+ *
+ * The event slug doesn't rotate. We link to the bare /event/{eventSlug} when available so the
+ * link is robust to slug churn; the user lands on the event page showing all outcomes as tiles
+ * and clicks the right one. For non-grouped binaries (no eventSlug) we fall back to
+ * /market/{slug} and accept that it may occasionally 404 between ingests.
  */
 export function marketDisplayUrl(m: { slug: string; eventSlug?: string | null }): string {
-  if (m.eventSlug) return `https://polymarket.com/event/${m.eventSlug}/${m.slug}`;
+  if (m.eventSlug) return `https://polymarket.com/event/${m.eventSlug}`;
   return `https://polymarket.com/market/${m.slug}`;
 }

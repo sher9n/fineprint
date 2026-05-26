@@ -12,7 +12,7 @@ import { BetCalculator } from "@/components/BetCalculator";
 import { LogBetForm } from "@/components/LogBetForm";
 import { Markdown } from "@/components/Markdown";
 import { cn } from "@/lib/utils";
-import { confidenceLabel, divergenceTypeLabel, hasThreeWayStructure, describeBet, humanizeTimeRemaining, impliedBetSide, stageLabel, solveThreeWay } from "@/lib/explain";
+import { confidenceLabel, divergenceTypeLabel, hasThreeWayStructure, describeBet, impliedBetSide, resolutionTimeline, stageLabel, solveThreeWay } from "@/lib/explain";
 import { fmtIst } from "@/lib/time";
 import { marketDisplayUrl } from "@/lib/polymarket";
 import { ScenarioBreakdown } from "@/components/ScenarioBreakdown";
@@ -349,7 +349,7 @@ export default function MarketDetailPage() {
             <h1 className="text-xl sm:text-2xl font-semibold tracking-tight leading-tight">{displayQuestion}</h1>
             <div className="flex items-center gap-3 mt-2 text-xs sm:text-sm text-[var(--text-muted)] flex-wrap">
               <span className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5" /> {humanizeTimeRemaining(m.endDate)}
+                <Calendar className="w-3.5 h-3.5" /> {resolutionTimeline(m.endDate, m.groupItemTitle)}
               </span>
               <span aria-hidden>·</span>
               <span className="flex items-center gap-1.5">

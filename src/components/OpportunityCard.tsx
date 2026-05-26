@@ -13,7 +13,7 @@ import {
   describeBet,
   hasThreeWayStructure,
   opportunityScoreLabel,
-  humanizeTimeRemaining,
+  resolutionTimeline,
   timeAgo,
 } from "@/lib/explain";
 import { fmtIst } from "@/lib/time";
@@ -132,7 +132,7 @@ export function OpportunityCard(p: CardProps) {
           <h3 className="text-base font-semibold leading-snug text-[var(--text)] group-hover:text-[var(--accent)] transition-colors line-clamp-2">{displayQuestion}</h3>
           <div className="flex items-center gap-1.5 mt-1 text-xs text-[var(--text-muted)] flex-wrap">
             <Clock className="w-3 h-3" />
-            <span>{humanizeTimeRemaining(p.endDate)}</span>
+            <span>{resolutionTimeline(p.endDate, p.groupItemTitle)}</span>
             <span aria-hidden>·</span>
             <span>${(p.liquidity / 1000).toFixed(0)}k liquidity</span>
             {(a.betSide === "YES" || a.betSide === "NO") && (

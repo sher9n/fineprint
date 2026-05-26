@@ -231,3 +231,98 @@ export function humanizeTimeRemaining(endDate: Date | string | null | undefined)
   if (days < 60) return `trading ends in ${Math.round(days)}d`;
   return `trading ends in ${Math.round(days / 30)}mo`;
 }
+
+const MONTH_DAY_PATTERN = /^(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+(\d{1,2})(?:,\s*(\d{4}))?$/i;
+
+/**
+ * Parse a groupItemTitle like "June 30", "December 31, 2026", or "Jun 30" into a concrete date.
+ * Returns null if the string isn't date-shaped (candidate names, money thresholds, etc).
+ *
+ * For dates without an explicit year, we derive the year from `referenceDate` (typically the
+ * market's endDate). If the parsed date would be in the past relative to the reference, we roll
+ * forward a year — handles Polymarket events that cross calendar boundaries (a "January 5"
+ * outcome in a series running through Dec is January next year).
+ */
+function parseGroupItemTitleDate(
+  groupItemTitle: string | null | undefined,
+  referenceDate: Date | null
+): Date | null {
+  if (!groupItemTitle) return null;
+  const m = groupItemTitle.trim().match(MONTH_DAY_PATTERN);
+  if (!m) return null;
+  const [, monthRaw, dayRaw, yearRaw] = m;
+  const refYear = referenceDate ? referenceDate.getUTCFullYear() : new Date().getUTCFullYear();
+  const year = yearRaw ? parseInt(yearRaw, 10) : refYear;
+  // Date.parse handles "June 30 2026" reliably across V8. Force midnight UTC so the resulting
+  // date matches how Polymarket renders these labels.
+  const parsed = new Date(Date.UTC(year, monthIndex(monthRaw), parseInt(dayRaw, 10)));
+  if (isNaN(parsed.getTime())) return null;
+  // If we guessed the year and the parsed date is before the reference (or before now if no
+  // reference), bump to next year.
+  if (!yearRaw) {
+    const cutoff = referenceDate ? referenceDate.getTime() : Date.now();
+    if (parsed.getTime() < cutoff) parsed.setUTCFullYear(year + 1);
+  }
+  return parsed;
+}
+
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0, january: 0,
+  feb: 1, february: 1,
+  mar: 2, march: 2,
+  apr: 3, april: 3,
+  may: 4,
+  jun: 5, june: 5,
+  jul: 6, july: 6,
+  aug: 7, august: 7,
+  sep: 8, sept: 8, september: 8,
+  oct: 9, october: 9,
+  nov: 10, november: 10,
+  dec: 11, december: 11,
+};
+
+function monthIndex(monthName: string): number {
+  return MONTH_INDEX[monthName.toLowerCase()] ?? 0;
+}
+
+function formatResolutionDate(d: Date, includeYear: boolean): string {
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const month = months[d.getUTCMonth()];
+  const day = d.getUTCDate();
+  return includeYear ? `${month} ${day}, ${d.getUTCFullYear()}` : `${month} ${day}`;
+}
+
+/**
+ * The display string for a market's time situation, factoring in both:
+ *  - the trading-cutoff endDate from Polymarket, and
+ *  - the rules-defined resolution date when we can infer it from groupItemTitle.
+ *
+ * For grouped markets with a date-shaped groupItemTitle (the common case for time-series
+ * outcomes like "by June 30"), this shows "resolves by June 30" rather than the misleading
+ * "trading ends in 4d" — bettors care when they get paid, not when the orderbook freezes.
+ *
+ * When trading has already closed but the rules resolution is still in the future, returns
+ * "trading closed, resolves by June 30" so users understand the position is frozen but not yet
+ * decided. Non-grouped markets or non-date groupItemTitles fall through to humanizeTimeRemaining.
+ */
+export function resolutionTimeline(
+  endDate: Date | string | null | undefined,
+  groupItemTitle: string | null | undefined
+): string {
+  const endDateObj = endDate ? (typeof endDate === "string" ? new Date(endDate) : endDate) : null;
+  const resolveDate = parseGroupItemTitleDate(groupItemTitle, endDateObj);
+  if (!resolveDate) return humanizeTimeRemaining(endDate);
+
+  const now = Date.now();
+  const ms = resolveDate.getTime() - now;
+  // Show year only if it differs from the current calendar year or is more than ~9 months out.
+  const currentYear = new Date().getUTCFullYear();
+  const includeYear = resolveDate.getUTCFullYear() !== currentYear || ms > 9 * 30 * 86400000;
+  const dateStr = formatResolutionDate(resolveDate, includeYear);
+
+  if (ms < 0) return `resolved ${dateStr}`;
+
+  const tradingClosed = endDateObj != null && endDateObj.getTime() < now;
+  if (tradingClosed) return `trading closed, resolves by ${dateStr}`;
+  return `resolves by ${dateStr}`;
+}

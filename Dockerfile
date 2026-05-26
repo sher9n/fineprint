@@ -21,9 +21,11 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+# Replace the standalone's pruned node_modules with the full builder tree. Standalone strips out
+# anything not reachable from server.js, but `prisma migrate deploy` at boot needs its full
+# dependency graph (including transitive deps like `effect` via @prisma/config). The image grows,
+# but build reliability is worth it. Order matters: this overlays on top of standalone's output.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
 USER nextjs

@@ -123,12 +123,16 @@ export async function fetchMarketsPage(opts: {
 }
 
 export async function fetchMarketById(id: string): Promise<RawMarket | null> {
-  const url = `${GAMMA_URL}/markets/${encodeURIComponent(id)}`;
+  // Use the listing endpoint with an id filter instead of /markets/{id}. The single-market
+  // endpoint omits the `events` array, which means reconciliation silently strips a market's
+  // event association on every refetch. The listing form preserves it.
+  const url = `${GAMMA_URL}/markets?id=${encodeURIComponent(id)}&limit=1`;
   const res = await fetch(url, { headers: { accept: "application/json" } });
-  if (res.status === 404) return null;
   if (!res.ok) throw new Error(`gamma fetch ${id} ${res.status}: ${await res.text().catch(() => "")}`);
-  const data = (await res.json()) as RawMarket | null;
-  return data && data.id ? data : null;
+  const data = (await res.json()) as RawMarket[] | null;
+  if (!Array.isArray(data) || data.length === 0) return null;
+  const first = data[0];
+  return first && first.id ? first : null;
 }
 
 export async function fetchAllOpenMarkets(opts?: {
@@ -161,4 +165,19 @@ export async function fetchAllOpenMarkets(opts?: {
 
 export function polymarketUrl(slug: string) {
   return `https://polymarket.com/market/${slug}`;
+}
+
+/**
+ * Build the most stable Polymarket URL we can for a given market.
+ *
+ * The market-level slug rotates: Polymarket appends numeric suffixes after creation, so a slug
+ * we ingested yesterday may 307 to /404 today. The event slug doesn't rotate, so for grouped
+ * markets we link to `/event/{eventSlug}/{slug}` (Polymarket's canonical form, which still
+ * highlights the specific outcome inside the event). If `eventSlug` is missing — true for ~45%
+ * of markets in the DB before the fetchMarketById fix — we fall back to `/market/{slug}` and
+ * accept that it may sometimes 404.
+ */
+export function marketDisplayUrl(m: { slug: string; eventSlug?: string | null }): string {
+  if (m.eventSlug) return `https://polymarket.com/event/${m.eventSlug}/${m.slug}`;
+  return `https://polymarket.com/market/${m.slug}`;
 }

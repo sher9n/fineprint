@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { impliedBetSide } from "@/lib/explain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,8 +71,17 @@ export async function GET(req: NextRequest) {
       const opusA = findCurrent("opus");
       const gptA = findCurrent("gpt_deep");
       const synthA = findCurrent("synthesis");
+      // Compare implied bet direction, not raw edge_direction. A GPT fact-finder that returns
+      // edge_direction=NONE because there's no rules-vs-vibe gap, yet estimates P(YES) far above
+      // the market price, is implicitly recommending YES — and "synthesis_disagreed" would be
+      // misleading. See impliedBetSide() docs.
       let verifyStage: string;
-      if (synthA) verifyStage = opusA && gptA && opusA.edgeDirection === gptA.edgeDirection ? "synthesis_agreed" : "synthesis_disagreed";
+      if (synthA) {
+        const opusSide = opusA ? impliedBetSide(opusA, opusA.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
+        const gptSide = gptA ? impliedBetSide(gptA, gptA.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
+        const bothDirected = opusSide !== "NONE" && gptSide !== "NONE";
+        verifyStage = bothDirected && opusSide === gptSide ? "synthesis_agreed" : "synthesis_disagreed";
+      }
       else if (opusA && gptA) verifyStage = "opus_and_gpt";
       else if (opusA) verifyStage = "opus_only";
       else if (gptA) verifyStage = "gpt_only";

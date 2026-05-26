@@ -12,7 +12,7 @@ import { BetCalculator } from "@/components/BetCalculator";
 import { LogBetForm } from "@/components/LogBetForm";
 import { Markdown } from "@/components/Markdown";
 import { cn } from "@/lib/utils";
-import { confidenceLabel, divergenceTypeLabel, hasThreeWayStructure, describeBet, humanizeTimeRemaining, stageLabel, solveThreeWay } from "@/lib/explain";
+import { confidenceLabel, divergenceTypeLabel, hasThreeWayStructure, describeBet, humanizeTimeRemaining, impliedBetSide, stageLabel, solveThreeWay } from "@/lib/explain";
 import { fmtIst } from "@/lib/time";
 import { marketDisplayUrl } from "@/lib/polymarket";
 import { ScenarioBreakdown } from "@/components/ScenarioBreakdown";
@@ -254,11 +254,20 @@ export default function MarketDetailPage() {
   // The primary analysis drives the headline recommendation, in priority order:
   // synthesis (final) > opus (verified) > gpt_deep (research only) > latest haiku/sonnet.
   const a = synthesisAnalysis ?? opusAnalysis ?? gptAnalysis ?? m.analyses[0];
+  // Compare implied bet direction (betSide / rule_p-vs-price), NOT raw edge_direction. The
+  // schema's edge_direction answers "does the LITERAL reading favor a side over the VIBE reading"
+  // — a divergence-direction. A fact-finder that sees no rules-vs-vibe gap but estimates P(YES)
+  // far above the market price returns edge_direction=NONE while still implicitly recommending
+  // YES. The agreement banner asks the bet question, not the divergence question.
+  const opusSide = opusAnalysis ? impliedBetSide(opusAnalysis, opusAnalysis.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
+  const gptSide = gptAnalysis ? impliedBetSide(gptAnalysis, gptAnalysis.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
   const agreement: "agree" | "disagree" | null =
     opusAnalysis && gptAnalysis
-      ? opusAnalysis.edgeDirection === gptAnalysis.edgeDirection
+      ? opusSide !== "NONE" && gptSide !== "NONE" && opusSide === gptSide
         ? "agree"
-        : "disagree"
+        : opusSide === gptSide
+          ? null
+          : "disagree"
       : null;
   const polymarketUrl = marketDisplayUrl(m);
   const displayQuestion = m.eventTitle && m.groupItemTitle ? `${m.eventTitle} — ${m.groupItemTitle}` : m.question;
@@ -441,7 +450,7 @@ export default function MarketDetailPage() {
           <div className="rounded-xl bg-[var(--amber-soft)] border border-[var(--amber)]/40 p-3 flex items-start gap-2 text-sm">
             <AlertTriangle className="w-4 h-4 text-[var(--amber)] shrink-0 mt-0.5" />
             <span>
-              <strong className="text-[var(--amber)]">Models disagree:</strong> Opus says bet {opusAnalysis?.edgeDirection}, GPT deep-research says {gptAnalysis?.edgeDirection}. The synthesis above is Opus&apos;s reconciliation; see the side-by-side evidence below before betting.
+              <strong className="text-[var(--amber)]">Models disagree:</strong> Opus implies {opusSide === "NONE" ? "no edge" : `bet ${opusSide}`}, GPT deep-research implies {gptSide === "NONE" ? "no edge" : `bet ${gptSide}`}. The synthesis above is Opus&apos;s reconciliation; see the side-by-side evidence below before betting.
             </span>
           </div>
         )}

@@ -82,9 +82,9 @@ ${summarizeAnalysisForSynthesis("GPT (fact-finder, market-blind)", gptAnalysis)}
 
 YOUR TASK
 
-1. State whether Opus and GPT agree on edge_direction and roughly agree on divergence_score.
-2. If they disagree, classify the disagreement as FACTUAL (favor GPT) or STRUCTURAL (favor Opus) and explain which specific piece of evidence is decisive. Reference source_findings or reasoning from each by name.
-3. If they agree, combine the strongest claim from each: typically Opus's market-structural reading plus GPT's factual world-state.
+1. State whether Opus and GPT agree on the IMPLIED BET DIRECTION (where each model's rule_implied_probability sits relative to the market price, and which side each would buy). Note: the raw edge_direction field can be misleading here. It means "which side does the LITERAL reading favor over the VIBE reading?" — a divergence-direction. A confident fact-finder that sees no rules-vs-vibe gap but estimates P(YES) far above price returns edge_direction=NONE while still implicitly recommending YES. Compare implied bet direction, not labels.
+2. If they disagree on bet direction, classify the disagreement as FACTUAL (favor GPT) or STRUCTURAL (favor Opus) and explain which specific piece of evidence is decisive. Reference source_findings or reasoning from each by name.
+3. If they agree on bet direction (even if one labeled the divergence differently), combine the strongest claim from each: typically Opus's market-structural reading plus GPT's factual world-state.
 4. Produce your final verdict. The divergence_score in your output is your judgment of the actionable gap given all the evidence — not a vote count, not an auto-cap on disagreement. An asymmetric disagreement that you have classified is often a HIGHER-confidence signal than naive agreement on a textual reading.
 5. Be honest about uncertainty. If neither analysis surfaced strong evidence, say so and score conservatively.
 
@@ -190,23 +190,4 @@ Then the literal separator "---JSON---" on its own line, then a single JSON obje
       cacheCreationTokens: usage.cacheCreationTokens,
     },
   });
-}
-
-/**
- * Public helper: are Opus and GPT in agreement on edge_direction for this market's current rules?
- * Returns null if either analysis is missing. Doesn't run the synthesis pass.
- */
-export async function modelAgreementState(marketId: string, rulesHash: string): Promise<"agree" | "disagree" | null> {
-  const opus = await prisma.analysis.findFirst({
-    where: { marketId, pass: "opus", rulesHash },
-    orderBy: { createdAt: "desc" },
-    select: { edgeDirection: true },
-  });
-  const gpt = await prisma.analysis.findFirst({
-    where: { marketId, pass: "gpt_deep", rulesHash },
-    orderBy: { createdAt: "desc" },
-    select: { edgeDirection: true },
-  });
-  if (!opus || !gpt) return null;
-  return opus.edgeDirection === gpt.edgeDirection ? "agree" : "disagree";
 }

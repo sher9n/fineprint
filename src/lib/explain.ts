@@ -82,6 +82,45 @@ export function describeBet({
 }
 
 /**
+ * Resolve which side an analysis is implicitly recommending, agnostic of how the model
+ * labeled `edge_direction`.
+ *
+ * Why this exists: the schema's `edge_direction` answers "which side does the LITERAL reading
+ * favor over the VIBE reading?" — a divergence-direction, not a bet-direction. A confident
+ * fact-finder that sees no rules-vs-vibe gap (divergence ~1) but estimates P(YES) = 1.0 against
+ * a 49¢ price returns edge_direction = "NONE", which makes it look like it's saying "no bet" —
+ * even though it's saying "buy YES, the market is just mispriced." The two ideas live in the
+ * same field, and they shouldn't.
+ *
+ * Resolution order:
+ *   1. If betSide is YES or NO (set by computeEdge from payouts vs price), trust it.
+ *   2. Else if rule_implied_probability is set and far from the live YES price (>10pp gap),
+ *      infer YES (when P > price) or NO (when P < price). This is the case computeEdge would
+ *      have handled if divergenceScore had been >= 4, so we replicate the EV math here.
+ *   3. Else fall back to the raw model edge_direction, mapped to YES/NO/NONE.
+ *
+ * Used wherever the UI asks "do Opus and GPT agree on the bet" — that question needs an
+ * implied-bet-direction comparator, not a divergence-direction one.
+ */
+export function impliedBetSide(
+  a: {
+    betSide?: string | null;
+    edgeDirection?: string | null;
+    ruleImpliedProbability?: number | null;
+  },
+  yesPrice: number | null
+): "YES" | "NO" | "NONE" {
+  if (a.betSide === "YES" || a.betSide === "NO") return a.betSide;
+  if (a.ruleImpliedProbability != null && yesPrice != null) {
+    const gap = a.ruleImpliedProbability - yesPrice;
+    if (gap > 0.1) return "YES";
+    if (gap < -0.1) return "NO";
+  }
+  if (a.edgeDirection === "YES" || a.edgeDirection === "NO") return a.edgeDirection;
+  return "NONE";
+}
+
+/**
  * Detect markets that have a tie-breaker / fallback rule. Two structures appear in practice:
  *   - "Resolves to Other" or no-payout fallback: sum(E_yes, E_no) < 1
  *   - "Resolves 50-50" fallback (the common one): sum(E_yes, E_no) stays at 1, but the model's

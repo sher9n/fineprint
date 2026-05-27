@@ -1,5 +1,11 @@
-FROM node:22-alpine AS base
-RUN apk add --no-cache libc6-compat openssl
+# Debian-slim base instead of alpine: @huggingface/transformers ships onnxruntime-node which
+# requires glibc-linked .so files; alpine's musl libc fails at runtime with "Error relocating
+# libonnxruntime.so.1: __vsnprintf_chk: symbol not found". Bookworm-slim is ~100MB larger but
+# everything links cleanly.
+FROM node:22-slim AS base
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 FROM base AS deps

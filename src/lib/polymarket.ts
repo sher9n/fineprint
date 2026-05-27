@@ -182,7 +182,7 @@ export async function fetchAllOpenMarkets(opts?: {
  */
 export async function fetchAllClosedMarkets(opts?: {
   maxPages?: number;
-  onPage?: (page: RawMarket[], cursor: string) => void;
+  onPage?: (page: RawMarket[], cursor: string) => void | Promise<void>;
 }): Promise<RawMarket[]> {
   const maxPages = opts?.maxPages ?? 500;
   const all: RawMarket[] = [];
@@ -228,7 +228,7 @@ export async function fetchAllClosedMarkets(opts?: {
         novel++;
       }
     }
-    opts?.onPage?.(page, cursor);
+    await opts?.onPage?.(page, cursor);
     if (novel === 0) break;
     if (!body.next_cursor || body.next_cursor === cursor) break;
     cursor = body.next_cursor;

@@ -33,39 +33,13 @@ async function main() {
   console.log(`[backfill-closed] DB closed-market count BEFORE: ${before}`);
 
   let pages = 0;
-  const start = Date.now();
-  const raws = await fetchAllClosedMarkets({
-    maxPages,
-    onPage: (page) => {
-      pages++;
-      if (pages % 20 === 1 || page.length < 100) {
-        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-        console.log(`  page ${pages}: ${page.length} markets (${elapsed}s elapsed)`);
-      }
-    },
-  });
-  const fetchSec = ((Date.now() - start) / 1000).toFixed(1);
-  console.log(`[backfill-closed] fetched ${raws.length} closed markets from Gamma in ${fetchSec}s.`);
-
-  const normalized: NormalizedMarket[] = [];
-  let normSkipped = 0;
-  for (const raw of raws) {
-    const n = normalize(raw);
-    if (!n) { normSkipped++; continue; }
-    if (!n.description || n.description.length < 30) { normSkipped++; continue; }
-    normalized.push(n);
-  }
-  console.log(`[backfill-closed] ${normalized.length} normalized, ${normSkipped} skipped (no desc / no id).`);
-
   let created = 0;
   let updated = 0;
   let errors = 0;
-  const upStart = Date.now();
-  // Sequential upserts with retry-on-disconnect. The Railway public proxy drops connections
-  // under sustained load (observed ETIMEDOUT after ~6K markets earlier); on any error we
-  // sleep + try again, up to N times. Each retry attempts a fresh DB round-trip; Prisma
-  // re-establishes the connection transparently.
-  for (const n of normalized) {
+  let normSkipped = 0;
+  const start = Date.now();
+
+  async function upsertWithRetry(n: NormalizedMarket): Promise<void> {
     const maxAttempts = 5;
     let lastErr: unknown = null;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -73,27 +47,40 @@ async function main() {
         const r = await upsertMarket(n);
         if (r.created) created++;
         else updated++;
-        lastErr = null;
-        break;
+        return;
       } catch (err) {
         lastErr = err;
         const msg = String(err);
         const transient = msg.includes("ETIMEDOUT") || msg.includes("P1001") || msg.includes("ECONNRESET") || msg.includes("Connection terminated") || msg.includes("read ECONN");
         if (!transient || attempt === maxAttempts - 1) break;
         const delay = 500 * Math.pow(2, attempt) + Math.random() * 250;
-        console.warn(`  ${n.id} ${msg.slice(0, 60)} — retry ${attempt + 1}/${maxAttempts - 1} in ${Math.round(delay)}ms`);
         await new Promise((r) => setTimeout(r, delay));
       }
     }
-    if (lastErr) {
-      errors++;
-      console.error(`  upsert ${n.id} failed after retries:`, String(lastErr).slice(0, 200));
-    }
-    if ((created + updated) % 250 === 0 && (created + updated) > 0) {
-      const sec = ((Date.now() - upStart) / 1000).toFixed(1);
-      console.log(`  progress: ${created} created, ${updated} updated, ${errors} errors (${sec}s)`);
-    }
+    errors++;
+    console.error(`  upsert ${n.id} failed:`, String(lastErr).slice(0, 200));
   }
+
+  // Per-page upsert via the onPage callback. The previous fetch-all-then-upsert lost all
+  // work if Gamma 500'd on any page (ENOTFOUND after retries on page 648 of ~660 threw away
+  // 65K markets). Now each page persists immediately — a crash leaves partial progress in
+  // the DB and a re-run picks up where we left off (idempotent upserts).
+  await fetchAllClosedMarkets({
+    maxPages,
+    onPage: async (page) => {
+      pages++;
+      for (const raw of page) {
+        const n = normalize(raw);
+        if (!n) { normSkipped++; continue; }
+        if (!n.description || n.description.length < 30) { normSkipped++; continue; }
+        await upsertWithRetry(n);
+      }
+      if (pages % 10 === 1 || page.length < 100) {
+        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+        console.log(`  page ${pages}: ${page.length} fetched (cumulative: ${created} created, ${updated} updated, ${errors} errors, ${normSkipped} skipped, ${elapsed}s)`);
+      }
+    },
+  });
 
   const after = await prisma.market.count({ where: { closed: true } });
   const totalSec = ((Date.now() - start) / 1000).toFixed(1);

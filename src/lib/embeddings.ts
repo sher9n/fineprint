@@ -98,21 +98,48 @@ export async function embedPendingMarkets(opts: { limit?: number; batchSize?: nu
   for (let i = 0; i < rows.length; i += batchSize) {
     const chunk = rows.slice(i, i + batchSize);
     const texts = chunk.map((r) => buildEmbeddingText(r));
-    try {
-      const vectors = await embedBatch(texts);
-      await Promise.all(
-        chunk.map((r, idx) =>
-          prisma.$executeRawUnsafe(
-            `UPDATE "Market" SET embedding = $1::vector WHERE id = $2`,
-            vectorLiteral(vectors[idx]),
-            r.id,
-          ),
-        ),
-      );
-      embedded += chunk.length;
-    } catch (err) {
-      errors += chunk.length;
-      console.error(`[embed] batch failed (${chunk.length} markets):`, String(err).slice(0, 200));
+
+    const maxAttempts = 5;
+    let succeeded = false;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const vectors = await embedBatch(texts);
+        // Single bulk UPDATE per batch instead of N concurrent per-row UPDATEs. The latter
+        // hammers connection pools and times out over Railway's public proxy. This stamps all
+        // N rows in one round-trip using a VALUES + JOIN pattern.
+        const valuesClauses: string[] = [];
+        const params: unknown[] = [];
+        chunk.forEach((r, idx) => {
+          params.push(r.id);
+          params.push(vectorLiteral(vectors[idx]));
+          const idP = `$${idx * 2 + 1}`;
+          const vP = `$${idx * 2 + 2}`;
+          valuesClauses.push(`(${idP}, ${vP}::vector)`);
+        });
+        const sql = `
+          UPDATE "Market" m SET embedding = v.embedding
+          FROM (VALUES ${valuesClauses.join(",")}) AS v(id, embedding)
+          WHERE m.id = v.id
+        `;
+        await prisma.$executeRawUnsafe(sql, ...params);
+        embedded += chunk.length;
+        succeeded = true;
+        break;
+      } catch (err) {
+        const msg = String(err);
+        const transient = msg.includes("ETIMEDOUT") || msg.includes("P1001") || msg.includes("ECONNRESET") || msg.includes("Connection terminated") || msg.includes("read ECONN");
+        if (!transient || attempt === maxAttempts - 1) {
+          errors += chunk.length;
+          console.error(`[embed] batch failed (${chunk.length} markets) after attempt ${attempt + 1}:`, msg.slice(0, 200));
+          break;
+        }
+        const delay = 1000 * Math.pow(2, attempt) + Math.random() * 500;
+        console.warn(`[embed] batch transient error: ${msg.slice(0, 80)} — retry ${attempt + 1}/${maxAttempts - 1} in ${Math.round(delay)}ms`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+    if (!succeeded) {
+      // Already counted in errors above; just continue
     }
     opts.onProgress?.(Math.min(i + batchSize, rows.length), total);
   }

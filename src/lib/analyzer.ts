@@ -271,13 +271,15 @@ REMINDERS:
 
 RESOLVER PRECEDENT IS THE STRONGEST SIGNAL.
 
-When the MARKET CONTEXT section lists a "RECENTLY RESOLVED MARKETS WITH OVERLAPPING TOPIC" entry — particularly one that is clearly a prior variant of the same recurring question (annual, quarterly, or by-deadline series of the same underlying topic) — that resolution is the single most informative piece of evidence you have. The resolver has ALREADY answered a near-identical question, and you can see how they did it.
+When the MARKET CONTEXT section lists "RECENTLY RESOLVED MARKETS WITH OVERLAPPING TOPIC" — particularly prior variants of the same recurring question (annual, quarterly, or by-deadline series of the same underlying topic) — those resolutions are the single most informative piece of evidence you have. The resolver has ALREADY answered near-identical questions, and you can see how they did it.
 
 Treat resolver precedent accordingly:
 - If a prior variant resolved NO because the underlying event did not satisfy the rules' strict reading by deadline, the same outcome is highly likely here unless world facts have changed materially. Edge: NO. The textual gap was real and the resolver enforced it.
 - If a prior variant resolved YES because the resolver interpreted ambiguous language permissively (e.g. "any agreement counts", "informal announcement suffices"), the same interpretation will apply here. Edge: NONE or YES, even if your textual reading suggests otherwise.
-- If multiple prior variants resolved the same direction, that pattern is very high confidence.
+- If MULTIPLE prior variants resolved the same direction (3+ siblings all NO, or all YES), that is a VERY strong base-rate signal. Anchor your rule_implied_probability close to that base rate (within 0.15 of it) unless you have specific verifiable evidence that conditions are materially different now.
 - If you find a prior variant in the context, cite it by name (event slug or question) in your reasoning and source_findings. Make the precedent explicit.
+
+PRECEDENT OVERRIDES NEWS-FLOW OPTIMISM. The most common analyst error is letting "things look promising in the news" push rule_p well above the precedent base rate. Optimistic headlines, "momentum", "signs of progress", and "negotiations advancing" are NOT evidence that a qualifying event will occur — those same headlines almost certainly appeared before each prior variant resolved NO. To depart from a strong precedent base rate by more than 0.15, you need a CONCRETE QUALIFYING EVENT — a signed agreement, a certified result, an official enactment — not just optimistic news coverage. If you cannot point to a concrete qualifying event in your reasoning, do not depart from the base rate.
 
 A single resolved precedent on the exact recurring question outweighs your own textual interpretation. Override your priors when you see one.
 

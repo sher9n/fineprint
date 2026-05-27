@@ -61,16 +61,33 @@ async function main() {
   let updated = 0;
   let errors = 0;
   const upStart = Date.now();
-  // Sequential upserts. Postgres can take heavier concurrency but the Gamma fetch is the
-  // bottleneck; serial keeps logging readable and avoids burning DB connections.
+  // Sequential upserts with retry-on-disconnect. The Railway public proxy drops connections
+  // under sustained load (observed ETIMEDOUT after ~6K markets earlier); on any error we
+  // sleep + try again, up to N times. Each retry attempts a fresh DB round-trip; Prisma
+  // re-establishes the connection transparently.
   for (const n of normalized) {
-    try {
-      const r = await upsertMarket(n);
-      if (r.created) created++;
-      else updated++;
-    } catch (err) {
+    const maxAttempts = 5;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const r = await upsertMarket(n);
+        if (r.created) created++;
+        else updated++;
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        const msg = String(err);
+        const transient = msg.includes("ETIMEDOUT") || msg.includes("P1001") || msg.includes("ECONNRESET") || msg.includes("Connection terminated") || msg.includes("read ECONN");
+        if (!transient || attempt === maxAttempts - 1) break;
+        const delay = 500 * Math.pow(2, attempt) + Math.random() * 250;
+        console.warn(`  ${n.id} ${msg.slice(0, 60)} — retry ${attempt + 1}/${maxAttempts - 1} in ${Math.round(delay)}ms`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+    if (lastErr) {
       errors++;
-      console.error(`  upsert ${n.id} failed:`, String(err).slice(0, 200));
+      console.error(`  upsert ${n.id} failed after retries:`, String(lastErr).slice(0, 200));
     }
     if ((created + updated) % 250 === 0 && (created + updated) > 0) {
       const sec = ((Date.now() - upStart) / 1000).toFixed(1);

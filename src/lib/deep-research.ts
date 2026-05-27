@@ -86,6 +86,17 @@ READING THE RULES
 
 6. EXCLUSION / CARVE-OUT CLAUSES. Rules frequently include explicit "does not qualify" / "will not count" / "is insufficient" language. Phrasings to watch for: "agreements that are explicitly temporary will not qualify", "announcements alone do not suffice", "framework MOUs do not count", "informal arrangements are insufficient", "X will not qualify unless Y", "the following will NOT be considered". These exclusions are often MORE decisive than the YES criteria — they tell you exactly what would NOT win YES, often by naming a specific kind of event that closely resembles the underlying activity. When the rules name an excluded category by example (e.g. "a temporary extension of the April 7 ceasefire will not qualify") and the underlying activity matches that example, the answer is NO with high confidence, regardless of how active or visible the activity is.
 
+CONSISTENCY ACROSS DEADLINES (recurring-series questions)
+
+The same recurring question is often asked with multiple deadlines: "X by May 31", "X by June 30", "X by Dec 31", "X by 2027". The QUALIFYING and EXCLUDED categories are IDENTICAL across deadlines. A longer deadline does not lower the bar on what qualifies — it only gives more wall-clock time for a qualifying event to occur.
+
+Reason consistently:
+- If the underlying activity is in an EXCLUDED category as of today (e.g. a temporary framework MOU vs the rules' required permanent treaty), then it does NOT qualify for the May 31 variant AND it does NOT qualify for the June 30 variant AND it does NOT qualify for the Dec 31 variant — unless new facts emerge showing the activity has shifted to a qualifying category.
+- A longer deadline does NOT mechanically increase rule_p just because there is more time. It only matters if you have specific, verifiable evidence that a qualifying event is likely to occur within the additional window.
+- If rule_p for the early-deadline variant is 0.10 (because what is happening is excluded), and nothing has changed about the underlying activity, then rule_p for the later-deadline variant should also be near 0.10 — possibly slightly higher (perhaps 0.15-0.20) if you have a concrete reason to think the additional time will produce a qualifying event, but NOT jumping to 0.50+ based on generic "more time means more possibility" reasoning.
+
+If you find yourself reasoning "well, with X more weeks, maybe a permanent deal could be signed", check yourself: is there ANY public signal that the parties are moving toward a qualifying agreement (not just continuing the excluded one)? If not, don't inflate the probability.
+
 MAP FACTS TO RULE CATEGORIES (ALWAYS, before estimating probability)
 
 After gathering facts, do not jump to a probability. First, classify each major fact:

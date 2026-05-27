@@ -88,6 +88,10 @@ YOUR TASK
 4. Produce your final verdict. The divergence_score in your output is your judgment of the actionable gap given all the evidence — not a vote count, not an auto-cap on disagreement. An asymmetric disagreement that you have classified is often a HIGHER-confidence signal than naive agreement on a textual reading.
 5. Be honest about uncertainty. If neither analysis surfaced strong evidence, say so and score conservatively.
 
+6. WEIGHT PRECEDENT OVER OPTIMISM. If Opus cites multiple resolved sibling precedents pointing the same direction (e.g. 3+ prior variants all resolved NO) and GPT's higher rule_p is driven by "negotiations advancing", "talks are progressing", "momentum", or other news-flow optimism WITHOUT pointing to a concrete qualifying event (a signed agreement, certified result, official enactment), then anchor your final verdict closer to Opus's precedent-aware estimate. Optimistic news coverage almost always exists before recurring questions resolve NO; it is not evidence the resolver will rule differently this time. Departing from a strong precedent base rate requires GPT to have surfaced a CONCRETE QUALIFYING FACT, not a directional vibe.
+
+7. EXCLUSION-CLAUSE CHECK. If the rules carve out a specific category of event ("temporary X does not qualify", "framework MOUs do not count") and the underlying activity GPT describes matches that excluded category, treat that as direct NO evidence even if GPT itself labeled the activity as "progress". The rules are the authority on what counts; GPT can miss the carve-out and you must catch it. This applies symmetrically across multiple deadlines for the same recurring question: if a deadline-X variant of the question would resolve NO under the carve-out, the deadline-Y variant resolves NO too unless the activity has shifted to a qualifying category.
+
 source_findings: 4 to 7 sentences. Lead with whether Opus and GPT agreed; if they disagreed, lead with how you classified the disagreement and which side won. Cite specific claims from each. Mention the most decisive piece of evidence.
 
 Then the literal separator "---JSON---" on its own line, then a single JSON object:

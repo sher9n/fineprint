@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
 import { fetchAllClosedMarkets, normalize, type NormalizedMarket } from "../src/lib/polymarket";
-import { upsertMarket } from "../src/lib/ingest";
+import { bulkUpsertMarkets } from "../src/lib/ingest";
 
 /**
  * One-shot backfill: pull historical CLOSED markets from Polymarket Gamma and upsert into our DB.
@@ -33,51 +33,52 @@ async function main() {
   console.log(`[backfill-closed] DB closed-market count BEFORE: ${before}`);
 
   let pages = 0;
-  let created = 0;
-  let updated = 0;
+  let written = 0;
   let errors = 0;
   let normSkipped = 0;
   const start = Date.now();
 
-  async function upsertWithRetry(n: NormalizedMarket): Promise<void> {
+  async function bulkUpsertWithRetry(batch: NormalizedMarket[]): Promise<void> {
+    if (batch.length === 0) return;
     const maxAttempts = 5;
     let lastErr: unknown = null;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const r = await upsertMarket(n);
-        if (r.created) created++;
-        else updated++;
+        const r = await bulkUpsertMarkets(batch);
+        written += r.written;
         return;
       } catch (err) {
         lastErr = err;
         const msg = String(err);
         const transient = msg.includes("ETIMEDOUT") || msg.includes("P1001") || msg.includes("ECONNRESET") || msg.includes("Connection terminated") || msg.includes("read ECONN");
         if (!transient || attempt === maxAttempts - 1) break;
-        const delay = 500 * Math.pow(2, attempt) + Math.random() * 250;
+        const delay = 1000 * Math.pow(2, attempt) + Math.random() * 500;
         await new Promise((r) => setTimeout(r, delay));
       }
     }
-    errors++;
-    console.error(`  upsert ${n.id} failed:`, String(lastErr).slice(0, 200));
+    errors += batch.length;
+    console.error(`  bulk upsert of ${batch.length} failed:`, String(lastErr).slice(0, 200));
   }
 
-  // Per-page upsert via the onPage callback. The previous fetch-all-then-upsert lost all
-  // work if Gamma 500'd on any page (ENOTFOUND after retries on page 648 of ~660 threw away
-  // 65K markets). Now each page persists immediately — a crash leaves partial progress in
-  // the DB and a re-run picks up where we left off (idempotent upserts).
+  // Per-page bulk upsert via the onPage callback. ON-CONFLICT-DO-UPDATE in one round-trip
+  // collapses ~100 per-row round-trips into one (~100x speedup over the public proxy). Each
+  // page persists immediately so a crash leaves partial progress in the DB; re-run picks up
+  // where we left off (idempotent).
   await fetchAllClosedMarkets({
     maxPages,
     onPage: async (page) => {
       pages++;
+      const batch: NormalizedMarket[] = [];
       for (const raw of page) {
         const n = normalize(raw);
         if (!n) { normSkipped++; continue; }
         if (!n.description || n.description.length < 30) { normSkipped++; continue; }
-        await upsertWithRetry(n);
+        batch.push(n);
       }
-      if (pages % 10 === 1 || page.length < 100) {
+      await bulkUpsertWithRetry(batch);
+      if (pages % 20 === 1 || page.length < 100) {
         const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-        console.log(`  page ${pages}: ${page.length} fetched (cumulative: ${created} created, ${updated} updated, ${errors} errors, ${normSkipped} skipped, ${elapsed}s)`);
+        console.log(`  page ${pages}: ${page.length} fetched (cumulative: ${written} written, ${errors} errors, ${normSkipped} skipped, ${elapsed}s)`);
       }
     },
   });
@@ -85,8 +86,7 @@ async function main() {
   const after = await prisma.market.count({ where: { closed: true } });
   const totalSec = ((Date.now() - start) / 1000).toFixed(1);
   console.log(`\n[backfill-closed] DONE in ${totalSec}s.`);
-  console.log(`  created:  ${created}`);
-  console.log(`  updated:  ${updated}`);
+  console.log(`  written:  ${written}`);
   console.log(`  errors:   ${errors}`);
   console.log(`  skipped:  ${normSkipped}`);
   console.log(`  DB closed-market count BEFORE: ${before}`);

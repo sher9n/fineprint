@@ -20,6 +20,94 @@ export interface IngestResult {
   durationMs: number;
 }
 
+/**
+ * Bulk upsert: write many markets in a single round-trip via INSERT ... ON CONFLICT DO UPDATE.
+ *
+ * The per-row upsertMarket does findUnique + (update OR create), i.e. 2 round-trips per row.
+ * Over Railway's public proxy that's ~0.5s per row, so a 100-row page takes ~60s. For the
+ * 60K-market closed-history backfill that's untenable (~10 hours). One bulk INSERT per page
+ * collapses the same work into one round-trip (~0.5s), making the full backfill ~15 minutes.
+ *
+ * Returns counts only — does not distinguish per-row created vs updated or report rulesChanged
+ * (the backfill doesn't need that detail). Callers that need fine-grained results should keep
+ * using upsertMarket.
+ */
+export async function bulkUpsertMarkets(markets: NormalizedMarket[]): Promise<{ written: number }> {
+  if (markets.length === 0) return { written: 0 };
+  const now = new Date();
+
+  // 22 columns per row; build placeholders + flat params in one pass.
+  const placeholders: string[] = [];
+  const params: unknown[] = [];
+  for (const m of markets) {
+    const row: unknown[] = [
+      m.id,
+      m.conditionId,
+      m.slug,
+      m.question,
+      m.description,
+      m.resolutionSource,
+      m.endDate,
+      m.startDate,
+      m.liquidity,
+      m.volume,
+      JSON.stringify(m.outcomes),
+      JSON.stringify(m.outcomePrices),
+      m.yesPrice,
+      m.noPrice,
+      m.active,
+      m.closed,
+      m.imageUrl,
+      m.eventTitle,
+      m.eventSlug,
+      m.groupItemTitle,
+      m.negRiskMarketId,
+      hashRules(m.description),
+      now, // updatedAt (Prisma @updatedAt isn't enforced in raw SQL; set explicitly)
+      now, // lastIngestedAt
+    ];
+    const base = params.length;
+    placeholders.push(`(${row.map((_, i) => `$${base + i + 1}`).join(",")})`);
+    params.push(...row);
+  }
+
+  const sql = `
+    INSERT INTO "Market" (
+      id, "conditionId", slug, question, description, "resolutionSource",
+      "endDate", "startDate", liquidity, volume, outcomes, "outcomePrices",
+      "yesPrice", "noPrice", active, closed, "imageUrl",
+      "eventTitle", "eventSlug", "groupItemTitle", "negRiskMarketId",
+      "rulesHash", "updatedAt", "lastIngestedAt"
+    ) VALUES ${placeholders.join(",")}
+    ON CONFLICT (id) DO UPDATE SET
+      "conditionId" = EXCLUDED."conditionId",
+      slug = EXCLUDED.slug,
+      question = EXCLUDED.question,
+      description = EXCLUDED.description,
+      "resolutionSource" = EXCLUDED."resolutionSource",
+      "endDate" = EXCLUDED."endDate",
+      "startDate" = EXCLUDED."startDate",
+      liquidity = EXCLUDED.liquidity,
+      volume = EXCLUDED.volume,
+      outcomes = EXCLUDED.outcomes,
+      "outcomePrices" = EXCLUDED."outcomePrices",
+      "yesPrice" = EXCLUDED."yesPrice",
+      "noPrice" = EXCLUDED."noPrice",
+      active = EXCLUDED.active,
+      closed = EXCLUDED.closed,
+      "imageUrl" = EXCLUDED."imageUrl",
+      "eventTitle" = EXCLUDED."eventTitle",
+      "eventSlug" = EXCLUDED."eventSlug",
+      "groupItemTitle" = EXCLUDED."groupItemTitle",
+      "negRiskMarketId" = EXCLUDED."negRiskMarketId",
+      "rulesHash" = EXCLUDED."rulesHash",
+      "updatedAt" = EXCLUDED."updatedAt",
+      "lastIngestedAt" = EXCLUDED."lastIngestedAt"
+  `;
+  await prisma.$executeRawUnsafe(sql, ...params);
+  return { written: markets.length };
+}
+
 export async function upsertMarket(m: NormalizedMarket): Promise<{ created: boolean; rulesChanged: boolean; closedFlipped: boolean }> {
   const newHash = hashRules(m.description);
   const existing = await prisma.market.findUnique({ where: { id: m.id } });

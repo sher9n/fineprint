@@ -1,11 +1,13 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
 }
 
 // ============ AUTH ============
@@ -89,6 +91,11 @@ model Market {
   updatedAt        DateTime  @updatedAt
   lastIngestedAt   DateTime  @default(now())
   verifyFailures   Int       @default(0)
+  // Semantic embedding of the market's topic (eventTitle + groupItemTitle + question), used for
+  // finding sibling-by-topic precedents in buildMarketContext. 384-dim from local sentence-
+  // transformer all-MiniLM-L6-v2 (see src/lib/embeddings.ts). Nullable for rows ingested
+  // before the embedding pass.
+  embedding        Unsupported("vector(384)")?
 
   analyses         Analysis[]
   bets             Bet[]

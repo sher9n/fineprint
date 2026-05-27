@@ -163,6 +163,59 @@ export async function fetchAllOpenMarkets(opts?: {
   return all;
 }
 
+/**
+ * Pull historical closed/resolved markets. We need these in the DB so the verifier's
+ * resolvedSiblings query can surface prior-variant resolutions ("the resolver has already
+ * answered this kind of question, and here's how"), which is the single strongest signal
+ * for recurring-series markets. Stops paginating when a page returns zero novel ids.
+ */
+/**
+ * Pull historical closed/resolved markets via Gamma's keyset (cursor) endpoint. The offset-based
+ * /markets endpoint hard-caps at offset 10000 (it returns "validation error: offset too large,
+ * use /markets/keyset for deeper pagination"), and Polymarket has way more than 10K closed
+ * markets, so we paginate by cursor here.
+ *
+ * Why we need these in the DB: the verifier's resolvedSiblings query in src/lib/batch.ts looks
+ * for closed markets with overlapping keywords so Opus can reason about resolver precedent ("the
+ * resolver has already answered this kind of question, here's how"). For markets that resolved
+ * before our ingest started, those rows aren't in the DB and the precedent signal silently drops.
+ */
+export async function fetchAllClosedMarkets(opts?: {
+  maxPages?: number;
+  onPage?: (page: RawMarket[], cursor: string) => void;
+}): Promise<RawMarket[]> {
+  const maxPages = opts?.maxPages ?? 500;
+  const all: RawMarket[] = [];
+  const seen = new Set<string>();
+  let cursor = "";
+  for (let i = 0; i < maxPages; i++) {
+    const params = new URLSearchParams();
+    params.set("limit", "100");
+    params.set("active", "false");
+    params.set("closed", "true");
+    if (cursor) params.set("after_cursor", cursor);
+    const url = `${GAMMA_URL}/markets/keyset?${params.toString()}`;
+    const res = await fetch(url, { headers: { accept: "application/json" } });
+    if (!res.ok) throw new Error(`gamma keyset ${res.status}: ${await res.text().catch(() => "")}`);
+    const body = (await res.json()) as { markets?: RawMarket[]; next_cursor?: string };
+    const page = Array.isArray(body.markets) ? body.markets : [];
+    if (!page.length) break;
+    let novel = 0;
+    for (const m of page) {
+      if (m.id && !seen.has(m.id)) {
+        seen.add(m.id);
+        all.push(m);
+        novel++;
+      }
+    }
+    opts?.onPage?.(page, cursor);
+    if (novel === 0) break;
+    if (!body.next_cursor || body.next_cursor === cursor) break;
+    cursor = body.next_cursor;
+  }
+  return all;
+}
+
 export function polymarketUrl(slug: string) {
   return `https://polymarket.com/market/${slug}`;
 }

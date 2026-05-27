@@ -4,6 +4,7 @@ import { logCost, WEB_SEARCH_COST_PER_CALL, remainingBudgetUsd } from "./budget"
 import { computeEdge } from "./scoring";
 import { AnalysisSchema, SYSTEM_PROMPT, buildUserMessage, tryParseJson } from "./analyzer";
 import { llmCallsEnabled, LLMDisabledError } from "./llm-gate";
+import { findSimilarClosedMarkets } from "./embeddings";
 import type { Market } from "@prisma/client";
 
 const BATCH_DISCOUNT = 0.5;
@@ -58,24 +59,18 @@ async function buildMarketContext(market: Market): Promise<string> {
     }
   }
 
-  const keywords = extractTopicKeywords(`${market.question} ${market.description}`);
-  if (keywords.length > 0) {
-    const seenIds = new Set([market.id, ...eventSiblings.map((s) => s.id), ...negRiskSiblings.map((s) => s.id)]);
-    const resolvedSiblings = await prisma.market.findMany({
-      where: {
-        closed: true,
-        id: { notIn: Array.from(seenIds) },
-        OR: keywords.slice(0, 5).map((kw) => ({ question: { contains: kw, mode: "insensitive" as const } })),
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 6,
-    });
-    if (resolvedSiblings.length > 0) {
-      if (sections.length > 0) sections.push("");
-      sections.push("RECENTLY RESOLVED MARKETS WITH OVERLAPPING TOPIC (the resolver's revealed interpretation — trust precedent over textual reasoning):");
-      for (const s of resolvedSiblings) {
-        sections.push(`  - "${s.question}" → resolved ${inferResolution(s)}`);
-      }
+  // Semantic sibling search via pgvector cosine similarity on Market.embedding. Replaces the
+  // old keyword-OR-scoring approach which struggled with common keywords ("United" pulling
+  // sports markets) and missed lexical variants ("acquire" vs "purchase" vs "buy"). pgvector
+  // returns true topic-relatives regardless of exact wording. Falls through silently if the
+  // target market has no embedding yet (e.g. fresh ingest before backfill runs).
+  const excludeIds = [...eventSiblings.map((s) => s.id), ...negRiskSiblings.map((s) => s.id)];
+  const resolvedSiblings = await findSimilarClosedMarkets(market.id, { limit: 6, excludeIds });
+  if (resolvedSiblings.length > 0) {
+    if (sections.length > 0) sections.push("");
+    sections.push("RECENTLY RESOLVED MARKETS WITH OVERLAPPING TOPIC (the resolver's revealed interpretation — trust precedent over textual reasoning):");
+    for (const s of resolvedSiblings) {
+      sections.push(`  - "${s.question}" → resolved ${inferResolution(s)}`);
     }
   }
 
@@ -95,21 +90,9 @@ function inferResolution(market: Market): string {
   }
 }
 
-function extractTopicKeywords(text: string): string[] {
-  const stop = new Set(["This", "That", "Will", "With", "From", "Resolution", "Polymarket", "Source", "Resolves", "Yes", "No", "Other", "Market", "Trade", "Date", "Time"]);
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of text.split(/[^A-Za-z]+/)) {
-    if (raw.length < 4) continue;
-    if (!/^[A-Z]/.test(raw)) continue;
-    if (stop.has(raw)) continue;
-    if (seen.has(raw)) continue;
-    seen.add(raw);
-    out.push(raw);
-    if (out.length >= 8) break;
-  }
-  return out;
-}
+// (extractTopicKeywords + KEYWORD_STOP removed: replaced by semantic similarity via
+// findSimilarClosedMarkets in src/lib/embeddings.ts. Markets are now matched by pgvector
+// cosine distance on text-embedding-3-small embeddings rather than lexical keyword overlap.)
 
 async function buildVerifierUserMessage(market: Market): Promise<string> {
   const context = await buildMarketContext(market);

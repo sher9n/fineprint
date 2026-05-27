@@ -20,7 +20,7 @@ export interface IngestResult {
   durationMs: number;
 }
 
-async function upsertMarket(m: NormalizedMarket): Promise<{ created: boolean; rulesChanged: boolean; closedFlipped: boolean }> {
+export async function upsertMarket(m: NormalizedMarket): Promise<{ created: boolean; rulesChanged: boolean; closedFlipped: boolean }> {
   const newHash = hashRules(m.description);
   const existing = await prisma.market.findUnique({ where: { id: m.id } });
   const data = {

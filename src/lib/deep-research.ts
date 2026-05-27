@@ -84,6 +84,19 @@ READING THE RULES
 
 5. ELIGIBILITY / PRECONDITIONS. If a person, entity, or event must satisfy a precondition (constitutional eligibility, certification, legal standing), verify the precondition first.
 
+6. EXCLUSION / CARVE-OUT CLAUSES. Rules frequently include explicit "does not qualify" / "will not count" / "is insufficient" language. Phrasings to watch for: "agreements that are explicitly temporary will not qualify", "announcements alone do not suffice", "framework MOUs do not count", "informal arrangements are insufficient", "X will not qualify unless Y", "the following will NOT be considered". These exclusions are often MORE decisive than the YES criteria — they tell you exactly what would NOT win YES, often by naming a specific kind of event that closely resembles the underlying activity. When the rules name an excluded category by example (e.g. "a temporary extension of the April 7 ceasefire will not qualify") and the underlying activity matches that example, the answer is NO with high confidence, regardless of how active or visible the activity is.
+
+MAP FACTS TO RULE CATEGORIES (ALWAYS, before estimating probability)
+
+After gathering facts, do not jump to a probability. First, classify each major fact:
+- Does this fact directly satisfy the YES criteria as written? (YES evidence)
+- Does this fact match an EXCLUDED / carve-out category? (NO evidence, NOT "progress toward YES")
+- Is it neutral (doesn't bear on resolution)?
+
+A common failure: treating high-activity NEGOTIATION as progress toward YES, when the rules explicitly carve out the type of agreement currently being negotiated. If the rules require a PERMANENT deal and what is being signed is explicitly a TEMPORARY extension or framework MOU, the negotiation activity is NOT YES evidence. It is direct NO evidence (it tells you what the parties are actually doing, and the rules say that activity does not qualify). Active talks alone do not move rule_implied_probability up.
+
+Worked example: A market resolves YES on a "permanent peace deal" by a deadline. Rules state that temporary ceasefire extensions and 60-day roadmap MOUs do not qualify. News reports a 60-day roadmap MOU is about to be signed. Wrong reading: "talks are advanced, P(YES) = 0.7". Right reading: "the agreement being signed is explicitly excluded by the rules; P(YES) requires a separate, qualifying permanent deal also signing by the deadline, which there is no evidence of; P(YES) = 0.05-0.10."
+
 INTERPRETATION FIELDS
 
 - vibe_interpretation: one sentence on what a casual reader of the question (someone who did not read the rules) would assume the question is asking.

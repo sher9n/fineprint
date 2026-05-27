@@ -31,12 +31,22 @@ async function fireDailyRun() {
     const { runAnalysisPass } = await import("@/lib/analyzer");
     const { submitHaikuBatch, pickMarketsForBatch } = await import("@/lib/batch");
     const { ensureSettings } = await import("@/lib/bootstrap");
+    const { embedPendingMarkets } = await import("@/lib/embeddings");
     const { prisma } = await import("@/lib/prisma");
     await ensureSettings();
     const settings = await prisma.settings.findUnique({ where: { id: 1 } });
     const run = await prisma.ingestRun.create({ data: { kind: "scheduled", status: "running" } });
     try {
       const ing = await runIngest();
+      // Embed any newly-ingested markets (and re-embed any that were nulled). This is free
+      // (local model, no API), so we run it every day to keep the sibling-search index
+      // fresh. Caps at 20K per run to bound wall time.
+      try {
+        const eRes = await embedPendingMarkets({ limit: 20000 });
+        if (eRes.embedded > 0) console.log(`[scheduler] embedded ${eRes.embedded} markets (${eRes.errors} errors, ${eRes.remaining} still pending)`);
+      } catch (e) {
+        console.error(`[scheduler] embedPendingMarkets failed:`, String(e).slice(0, 200));
+      }
       if (settings?.batchModeEnabled) {
         const markets = await pickMarketsForBatch(2000);
         if (markets.length > 0) {

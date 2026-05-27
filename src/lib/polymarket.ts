@@ -195,9 +195,29 @@ export async function fetchAllClosedMarkets(opts?: {
     params.set("closed", "true");
     if (cursor) params.set("after_cursor", cursor);
     const url = `${GAMMA_URL}/markets/keyset?${params.toString()}`;
-    const res = await fetch(url, { headers: { accept: "application/json" } });
-    if (!res.ok) throw new Error(`gamma keyset ${res.status}: ${await res.text().catch(() => "")}`);
-    const body = (await res.json()) as { markets?: RawMarket[]; next_cursor?: string };
+    // Retry-on-transient-network. Long backfills (60K markets, 600+ pages) have a non-trivial
+    // chance of one ECONNRESET / "fetch failed" mid-run; without retry the whole pass gets
+    // thrown out. Exponential backoff up to 5 attempts. Non-transient (4xx) still throws.
+    let body: { markets?: RawMarket[]; next_cursor?: string } | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const res = await fetch(url, { headers: { accept: "application/json" } });
+        if (!res.ok) throw new Error(`gamma keyset ${res.status}: ${await res.text().catch(() => "")}`);
+        body = (await res.json()) as { markets?: RawMarket[]; next_cursor?: string };
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        const msg = String(err);
+        const transient = msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT") || msg.includes("fetch failed") || msg.includes("ENETUNREACH") || msg.includes("EAI_AGAIN") || /gamma keyset 5\d{2}/.test(msg);
+        if (!transient || attempt === 4) break;
+        const delay = 1500 * Math.pow(2, attempt) + Math.random() * 750;
+        console.warn(`[gamma keyset] page ${i + 1} transient: ${msg.slice(0, 80)} — retry ${attempt + 1}/4 in ${Math.round(delay)}ms`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+    if (!body) throw lastErr;
     const page = Array.isArray(body.markets) ? body.markets : [];
     if (!page.length) break;
     let novel = 0;

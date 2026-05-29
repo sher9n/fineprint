@@ -41,6 +41,9 @@ export async function GET(req: NextRequest) {
 
   const session = await auth();
   const userId = session?.user?.id;
+  // Map of which markets the signed-in user has bookmarked, joined post-filter so the size
+  // is bounded by the page limit, not the full sweep.
+  let bookmarkedIds: Set<string> = new Set();
 
   // Skip markets where the price has effectively collapsed to a decided answer.
   // Catches both truly-resolved-but-stale records and effectively-decided open markets.
@@ -174,9 +177,18 @@ export async function GET(req: NextRequest) {
     return 0;
   });
 
+  const sliced = enriched.slice(0, limit);
+  if (userId && sliced.length > 0) {
+    const rows = await prisma.bookmark.findMany({
+      where: { userId, marketId: { in: sliced.map((s) => s.market.id) } },
+      select: { marketId: true },
+    });
+    bookmarkedIds = new Set(rows.map((r) => r.marketId));
+  }
+
   return NextResponse.json({
     category,
-    markets: enriched.slice(0, limit).map(({ market, latest, verifyStage }) => {
+    markets: sliced.map(({ market, latest, verifyStage }) => {
       const votes = latest?.votes ?? [];
       const upvotes = votes.filter((v) => v.direction > 0).length;
       const downvotes = votes.filter((v) => v.direction < 0).length;
@@ -196,6 +208,7 @@ export async function GET(req: NextRequest) {
         imageUrl: market.imageUrl,
         verifyStage,
         foundAt,
+        bookmarked: bookmarkedIds.has(market.id),
         analysis: latest && {
           id: latest.id,
           pass: latest.pass,

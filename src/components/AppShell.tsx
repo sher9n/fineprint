@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useState, type ReactNode } from "react";
 import {
-  Compass, Globe, Receipt, Heart, Settings, LogOut, Menu, X, Wrench,
+  Compass, Globe, Receipt, Heart, Bookmark, Settings, LogOut, Menu, X, Wrench,
   History, Gauge, SlidersHorizontal, ChevronDown, User as UserIcon, HelpCircle,
 } from "lucide-react";
 import { Logo } from "./Logo";
@@ -87,6 +87,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <div className="text-sm text-[var(--text)] truncate">{session.user.email}</div>
                 </div>
                 <MenuSeparator />
+                <MenuLink href="/bookmarks" icon={<Bookmark className="w-4 h-4" />}>My bookmarks</MenuLink>
                 <MenuLink href="/bets" icon={<Receipt className="w-4 h-4" />}>My bets</MenuLink>
                 <MenuLink href="/votes" icon={<Heart className="w-4 h-4" />}>My votes</MenuLink>
                 <MenuLink href="/settings" icon={<Settings className="w-4 h-4" />}>Settings</MenuLink>
@@ -123,6 +124,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {session && (
                 <>
                   <div className="pt-3 pb-1 px-3 text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Your account</div>
+                  <MobileLink href="/bookmarks" label="My bookmarks" icon={Bookmark} active={path.startsWith("/bookmarks")} onClose={() => setMobileNavOpen(false)} />
                   <MobileLink href="/bets" label="My bets" icon={Receipt} active={path.startsWith("/bets")} onClose={() => setMobileNavOpen(false)} />
                   <MobileLink href="/votes" label="My votes" icon={Heart} active={path.startsWith("/votes")} onClose={() => setMobileNavOpen(false)} />
                   <MobileLink href="/settings" label="Settings" icon={Settings} active={path.startsWith("/settings")} onClose={() => setMobileNavOpen(false)} />

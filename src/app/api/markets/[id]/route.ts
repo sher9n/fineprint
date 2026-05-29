@@ -29,11 +29,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const downvotes = votes.filter((v) => v.direction < 0).length;
   const myVote = userId ? votes.find((v) => v.userId === userId)?.direction ?? 0 : 0;
 
+  let bookmarked = false;
+  if (userId) {
+    const b = await prisma.bookmark.findUnique({ where: { userId_marketId: { userId, marketId: id } } });
+    bookmarked = !!b;
+  }
+
   return NextResponse.json({
     market: {
       ...market,
       analyses: market.analyses.map((a) => ({ ...a, votes: undefined })),
     },
     votes: { up: upvotes, down: downvotes, mine: myVote },
+    bookmarked,
   });
 }

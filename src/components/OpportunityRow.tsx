@@ -19,6 +19,7 @@ import { fmtIst } from "@/lib/time";
 import { ScoreBadge } from "./ScoreBadge";
 import { DivergenceTooltip } from "./DivergenceTooltip";
 import { VerifyStageBadge } from "./VerifyStageBadge";
+import { BookmarkButton } from "./BookmarkButton";
 
 interface RowProps {
   id: string;
@@ -32,6 +33,7 @@ interface RowProps {
   endDate: string | null;
   verifyStage?: string;
   foundAt?: string | null;
+  bookmarked?: boolean;
   analysis: {
     id: string;
     pass: string;
@@ -227,6 +229,8 @@ export function OpportunityRow(p: RowProps) {
           >
             <ChevronDown className="w-4 h-4" />
           </button>
+          <span className="mx-0.5 w-px h-4 bg-[var(--border)] inline-block" />
+          <BookmarkButton marketId={p.id} initial={!!p.bookmarked} size="sm" />
         </div>
       </div>
 

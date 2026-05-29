@@ -11,6 +11,7 @@ import { AppShell } from "@/components/AppShell";
 import { BetCalculator } from "@/components/BetCalculator";
 import { LogBetForm } from "@/components/LogBetForm";
 import { Markdown } from "@/components/Markdown";
+import { BookmarkButton } from "@/components/BookmarkButton";
 import { cn } from "@/lib/utils";
 import { confidenceLabel, divergenceTypeLabel, hasThreeWayStructure, describeBet, impliedBetSide, resolutionTimeline, stageLabel, solveThreeWay } from "@/lib/explain";
 import { fmtIst } from "@/lib/time";
@@ -102,7 +103,7 @@ export default function MarketDetailPage() {
     queryFn: async () => {
       const res = await fetch(`/api/markets/${id}`);
       if (!res.ok) throw new Error("not found");
-      return res.json() as Promise<{ market: MarketDetail; votes: { up: number; down: number; mine: number } }>;
+      return res.json() as Promise<{ market: MarketDetail; votes: { up: number; down: number; mine: number }; bookmarked: boolean }>;
     },
     retry: false,
   });
@@ -381,6 +382,9 @@ export default function MarketDetailPage() {
                 See on Polymarket <ExternalLink className="w-3 h-3" />
               </a>
             </div>
+          </div>
+          <div className="shrink-0 hidden sm:block">
+            <BookmarkButton marketId={id} initial={!!data.bookmarked} variant="labeled" />
           </div>
         </div>
 

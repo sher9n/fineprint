@@ -21,10 +21,11 @@ model User {
   updatedAt     DateTime  @updatedAt
   isAdmin       Boolean   @default(false)
 
-  accounts Account[]
-  sessions Session[]
-  votes    Vote[]
-  bets     Bet[]
+  accounts  Account[]
+  sessions  Session[]
+  votes     Vote[]
+  bets      Bet[]
+  bookmarks Bookmark[]
 }
 
 model Account {
@@ -100,10 +101,27 @@ model Market {
   analyses         Analysis[]
   bets             Bet[]
   deepResearchJobs DeepResearchJob[]
+  bookmarks        Bookmark[]
 
   @@index([endDate])
   @@index([liquidity])
   @@index([active, closed])
+}
+
+/// User-saved markets for a personal "watch list". One bookmark per (user, market). Toggle
+/// semantics on the API: POST creates if missing, DELETE removes. The list view lives at
+/// /bookmarks; the icon toggle appears on opportunity cards, list rows, and the detail page.
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketId  String
+  market    Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, marketId])
+  @@index([userId, createdAt])
+  @@index([marketId])
 }
 
 model Analysis {

@@ -111,12 +111,15 @@ export async function GET(req: NextRequest) {
     })
     .filter(({ latest, verifyStage }) => {
       if (!latest) return false;
-      // Mispricings additionally require a directional bet side (NONE = no actionable signal).
-      // The obvious-pass prompt clamps the side to NONE when confidence < 5; we apply a soft
-      // floor of confidence >= minDivergence here to let the user tune the strictness.
+      // Mispricings additionally require a directional bet side from the MODEL, not the
+      // EV-math-derived betSide. The model's verdict (stored in edgeDirection) authoritatively
+      // says whether it found a >=20pp gap with sufficient confidence. The computed betSide
+      // can show YES/NO from tiny positive EV math even when the model said NONE — we ignore
+      // that for mispricings filtering. The obvious-pass prompt also clamps to NONE when
+      // confidence < 5; the minDivergence param below provides a softer floor.
       if (category === "mispricings") {
         if (latest.pass !== "obvious") return false;
-        if (latest.edgeDirection === "NONE" && latest.betSide === "NONE") return false;
+        if (latest.edgeDirection === "NONE") return false;
       }
       if (latest.edgeScore < minScore) return false;
       if (latest.divergenceScore < minDivergence) return false;

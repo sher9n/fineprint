@@ -371,8 +371,14 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
         continue;
       }
 
-      // confidence below 5 should never produce a bet side per the prompt; defense-in-depth here.
-      const betSideRaw = parsed.confidence < 5 ? "NONE" : parsed.obvious_bet_side;
+      // Defense-in-depth: the prompt says clamp to NONE when confidence < 5 OR the gap
+      // |true_p_yes - market_yes_price| < 0.20. Enforce both server-side in case the model
+      // strays. SpaceX example 2026-05-29 — model returned obvious=NONE with conf 7 because
+      // the gap was only 3pp; without enforcement the EV math would still surface a YES bet.
+      const trueP = parsed.true_p_yes ?? market.yesPrice ?? 0.5;
+      const marketYes = market.yesPrice ?? 0.5;
+      const gap = Math.abs(trueP - marketYes);
+      const betSideRaw = (parsed.confidence < 5 || gap < 0.20) ? "NONE" : parsed.obvious_bet_side;
       const expectedYesPayoutCents = parsed.true_p_yes != null ? parsed.true_p_yes * 100 : null;
       const expectedNoPayoutCents = parsed.true_p_yes != null ? (1 - parsed.true_p_yes) * 100 : null;
 
@@ -391,6 +397,13 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
 
       const yesMarketPct = market.yesPrice != null ? (market.yesPrice * 100).toFixed(1) : "?";
       const truePct = parsed.true_p_yes != null ? (parsed.true_p_yes * 100).toFixed(1) : "?";
+
+      // When the model intent is NONE (no actionable mispricing), force betSide to NONE and
+      // zero the edgeScore. computeEdge otherwise sets betSide from EV math and can produce
+      // a "Buy YES at 90¢ for +3% return" recommendation even when the model intentionally
+      // declined to flag the market. The model's verdict is authoritative for obvious-pass.
+      const finalBetSide = betSideRaw === "NONE" ? "NONE" : scored.betSide;
+      const finalEdgeScore = betSideRaw === "NONE" ? 0 : scored.edgeScore;
 
       await prisma.analysis.create({
         data: {
@@ -412,8 +425,8 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
           yesPriceAtAnalysis: market.yesPrice,
           noPriceAtAnalysis: market.noPrice,
           liquidityAtAnalysis: market.liquidity,
-          edgeScore: scored.edgeScore,
-          betSide: scored.betSide,
+          edgeScore: finalEdgeScore,
+          betSide: finalBetSide,
           priceGap: scored.priceGap,
           directionAgreement: scored.directionAgreement,
           costUsd: discountedCost,

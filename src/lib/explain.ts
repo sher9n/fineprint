@@ -39,6 +39,8 @@ export function divergenceTypeLabel(type: string): { short: string; explainer: s
       return { short: "Wording gap", explainer: "A key term in the title is defined narrowly or technically in the rules in a way that changes the math." };
     case "other":
       return { short: "Other mismatch", explainer: "There's a meaningful gap between the rules and the casual reading, but it doesn't fit a standard pattern." };
+    case "world_state":
+      return { short: "Reality gap", explainer: "Current world state already strongly determines the outcome but the market price hasn't caught up. Edge is on what's happened/is happening, not on what the rules say." };
     default:
       return { short: "No mismatch", explainer: "The rules match what most bettors would naturally assume." };
   }

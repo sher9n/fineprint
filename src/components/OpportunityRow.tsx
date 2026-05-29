@@ -141,7 +141,7 @@ export function OpportunityRow(p: RowProps) {
               <Dot />
               <span>${(p.liquidity / 1000).toFixed(0)}k liq</span>
               <Dot />
-              <DivergenceTooltip divergenceScore={a.divergenceScore} divergenceType={a.divergenceType} size="sm" />
+              <DivergenceTooltip divergenceScore={a.divergenceScore} divergenceType={a.divergenceType} size="sm" pass={a.pass} />
               <Dot />
               <span className="mono" title="YES / NO market price (cents per share)">
                 {p.yesPrice != null ? `${(p.yesPrice * 100).toFixed(0)}¢` : "?"}/{p.noPrice != null ? `${(p.noPrice * 100).toFixed(0)}¢` : p.yesPrice != null ? `${((1 - p.yesPrice) * 100).toFixed(0)}¢` : "?"}

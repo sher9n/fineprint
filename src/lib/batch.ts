@@ -2,7 +2,7 @@ import { prisma } from "./prisma";
 import { anthropic, HAIKU_MODEL, VERIFIER_MODEL, extractUsage, resolveFirstPassModel } from "./anthropic";
 import { logCost, WEB_SEARCH_COST_PER_CALL, remainingBudgetUsd } from "./budget";
 import { computeEdge } from "./scoring";
-import { AnalysisSchema, SYSTEM_PROMPT, buildUserMessage, tryParseJson } from "./analyzer";
+import { AnalysisSchema, ObviousBetSchema, SYSTEM_PROMPT, OBVIOUS_SYSTEM_PROMPT, buildUserMessage, tryParseJson } from "./analyzer";
 import { llmCallsEnabled, LLMDisabledError } from "./llm-gate";
 import { findSimilarClosedMarkets } from "./embeddings";
 import type { Market } from "@prisma/client";
@@ -16,6 +16,7 @@ import type { Market } from "@prisma/client";
 // the non-batch rates ARE accurate as documented; the discrepancy is batch-specific.
 const BATCH_DISCOUNT = 0.25;
 const VERIFIER_PURPOSE = "verifier_pass";
+export const OBVIOUS_PURPOSE = "obvious_pass";
 const FIRST_PASS_PURPOSES = new Set(["first_pass", "first_pass_haiku", "first_pass_sonnet"]);
 
 // Skip markets whose price has effectively collapsed. The "edge" is illusory in those cases
@@ -209,6 +210,53 @@ export async function submitVerifierBatch(markets: Market[], opts: { purpose?: s
   return batch.id;
 }
 
+/**
+ * Submit an OBVIOUS-BET batch (world-state mispricing pass). Runs Opus 4.7 + web_search on
+ * the same kind of input as the verifier but with a different system prompt focused on
+ * "is the current world state already determining the outcome?" rather than "do the rules
+ * have a gap?" Output schema is different (ObviousBetSchema) and ingestion writes
+ * Analysis rows with pass='obvious'.
+ *
+ * No sibling-market context in the user message — the obvious-bets prompt deliberately
+ * looks at primary sources, not at sibling Polymarket pricing.
+ */
+export async function submitObviousBatch(markets: Market[], opts: { purpose?: string } = {}): Promise<string> {
+  if (!llmCallsEnabled()) throw new LLMDisabledError();
+  if (markets.length === 0) throw new Error("no markets to submit");
+  const remaining = await remainingBudgetUsd();
+  const estimated = markets.length * VERIFIER_COST_ESTIMATE_PER_MARKET;
+  if (remaining < estimated) {
+    throw new Error(`budget gate: $${remaining.toFixed(2)} remaining < $${estimated.toFixed(2)} estimated for ${markets.length} markets`);
+  }
+  const client = anthropic();
+  const model = VERIFIER_MODEL;
+
+  const requests = markets.map((m) => ({
+    custom_id: m.id,
+    params: {
+      model,
+      max_tokens: 2048,
+      system: [{ type: "text" as const, text: OBVIOUS_SYSTEM_PROMPT, cache_control: { type: "ephemeral" as const } }],
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 } as never],
+      messages: [{ role: "user" as const, content: buildUserMessage(m) }],
+    },
+  }));
+
+  const batch = await client.messages.batches.create({ requests });
+
+  await prisma.batchJob.create({
+    data: {
+      anthropicBatchId: batch.id,
+      status: batch.processing_status,
+      purpose: opts.purpose ?? OBVIOUS_PURPOSE,
+      marketIds: JSON.stringify(markets.map((m) => m.id)),
+      totalRequests: markets.length,
+    },
+  });
+
+  return batch.id;
+}
+
 export async function pollAndIngestBatches(): Promise<{ checked: number; ingested: number }> {
   const inflight = await prisma.batchJob.findMany({
     where: { status: { in: ["submitted", "in_progress", "canceling"] } },
@@ -248,7 +296,8 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
   const client = anthropic();
   const stream = await client.messages.batches.results(anthropicBatchId);
   const isVerifier = purpose === VERIFIER_PURPOSE;
-  const pass: "haiku" | "opus" = isVerifier ? "opus" : "haiku";
+  const isObvious = purpose === OBVIOUS_PURPOSE;
+  const pass: "haiku" | "opus" | "obvious" = isObvious ? "obvious" : isVerifier ? "opus" : "haiku";
 
   let succeeded = 0;
   let failed = 0;
@@ -271,10 +320,10 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
 
     const message = entry.result.message;
     const usage = extractUsage(message.usage);
-    const model = message.model || (isVerifier ? VERIFIER_MODEL : HAIKU_MODEL);
+    const model = message.model || (isVerifier || isObvious ? VERIFIER_MODEL : HAIKU_MODEL);
 
     let webSearches = 0;
-    if (isVerifier) {
+    if (isVerifier || isObvious) {
       for (const c of message.content) {
         const anyC = c as unknown as { type?: string; name?: string };
         if (anyC.type === "server_tool_use" && anyC.name === "web_search") webSearches++;
@@ -299,6 +348,82 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
     if (!fullText.trim()) {
       failed++;
       if (isVerifier) await prisma.market.update({ where: { id: market.id }, data: { verifyFailures: { increment: 1 } } });
+      continue;
+    }
+
+    // OBVIOUS pass writes Analysis rows using a different schema. We map ObviousBet fields onto
+    // the existing Analysis columns:
+    //   divergenceScore         <- confidence (0-10)
+    //   ruleImpliedProbability  <- true_p_yes
+    //   edgeDirection           <- obvious_bet_side
+    //   sourceFindings          <- source_findings paragraph
+    //   verificationSteps       <- JSON-stringified key_facts
+    //   divergenceType          <- "world_state" (fixed sentinel)
+    // The vibe/literal interpretation fields are populated with terse market-price-vs-truth
+    // statements so the existing UI doesn't render blanks.
+    if (isObvious) {
+      let parsed;
+      try {
+        parsed = ObviousBetSchema.parse(tryParseJson(fullText));
+      } catch (e) {
+        failed++;
+        console.error(`[batch ${anthropicBatchId}] obvious parse fail ${marketId}:`, String(e).slice(0, 200));
+        continue;
+      }
+
+      // confidence below 5 should never produce a bet side per the prompt; defense-in-depth here.
+      const betSideRaw = parsed.confidence < 5 ? "NONE" : parsed.obvious_bet_side;
+      const expectedYesPayoutCents = parsed.true_p_yes != null ? parsed.true_p_yes * 100 : null;
+      const expectedNoPayoutCents = parsed.true_p_yes != null ? (1 - parsed.true_p_yes) * 100 : null;
+
+      const scored = computeEdge({
+        divergenceScore: parsed.confidence,
+        edgeDirection: betSideRaw,
+        yesPrice: market.yesPrice,
+        noPrice: market.noPrice,
+        liquidity: market.liquidity,
+        endDate: market.endDate,
+        ruleImpliedProbability: parsed.true_p_yes,
+        expectedYesPayoutCents,
+        expectedNoPayoutCents,
+        pass: "opus", // scoring rubric: treat obvious like a verified-quality signal
+      });
+
+      const yesMarketPct = market.yesPrice != null ? (market.yesPrice * 100).toFixed(1) : "?";
+      const truePct = parsed.true_p_yes != null ? (parsed.true_p_yes * 100).toFixed(1) : "?";
+
+      await prisma.analysis.create({
+        data: {
+          marketId: market.id,
+          rulesHash: market.rulesHash,
+          pass: "obvious",
+          model,
+          vibeInterpretation: `Market prices YES at ${yesMarketPct}%`,
+          literalInterpretation: `World-state evidence suggests YES at ${truePct}%`,
+          divergenceType: "world_state",
+          divergenceScore: parsed.confidence,
+          edgeDirection: betSideRaw,
+          ruleImpliedProbability: parsed.true_p_yes,
+          expectedYesPayoutCents,
+          expectedNoPayoutCents,
+          verificationSteps: JSON.stringify(parsed.key_facts),
+          reasoning: parsed.reasoning,
+          sourceFindings: parsed.source_findings || null,
+          yesPriceAtAnalysis: market.yesPrice,
+          noPriceAtAnalysis: market.noPrice,
+          liquidityAtAnalysis: market.liquidity,
+          edgeScore: scored.edgeScore,
+          betSide: scored.betSide,
+          priceGap: scored.priceGap,
+          directionAgreement: scored.directionAgreement,
+          costUsd: discountedCost,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheReadTokens: usage.cacheReadTokens,
+          cacheCreationTokens: usage.cacheCreationTokens,
+        },
+      });
+      succeeded++;
       continue;
     }
 
@@ -343,7 +468,7 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
       ruleImpliedProbability: parsed.rule_implied_probability,
       expectedYesPayoutCents: parsed.expected_yes_payout_cents,
       expectedNoPayoutCents: parsed.expected_no_payout_cents,
-      pass,
+      pass: pass as "haiku" | "opus",
     });
 
     await prisma.analysis.create({

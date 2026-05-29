@@ -110,13 +110,19 @@ export function OpportunityCard(p: CardProps) {
     }
   }
 
-  // Accent border for second-opinion markets — same convention as OpportunityRow.
-  const accentBorder =
-    p.verifyStage === "synthesis_agreed"
-      ? "border-l-2 border-l-[var(--green)]"
-      : p.verifyStage === "synthesis_disagreed"
-      ? "border-l-2 border-l-[var(--amber)]"
-      : "";
+  // Accent border:
+  //   - mispricings (pass='obvious'): high confidence = green (primary source), medium = amber
+  //   - fineprint synthesis: agreed = green, disagreed = amber
+  // Anything else: no accent.
+  let accentBorder = "";
+  if (a.pass === "obvious") {
+    if (a.divergenceScore >= 9) accentBorder = "border-l-2 border-l-[var(--green)]";
+    else if (a.divergenceScore >= 7) accentBorder = "border-l-2 border-l-[var(--amber)]";
+  } else if (p.verifyStage === "synthesis_agreed") {
+    accentBorder = "border-l-2 border-l-[var(--green)]";
+  } else if (p.verifyStage === "synthesis_disagreed") {
+    accentBorder = "border-l-2 border-l-[var(--amber)]";
+  }
   const foundLabel = p.foundAt ? timeAgo(p.foundAt) : null;
 
   return (
@@ -174,7 +180,7 @@ export function OpportunityCard(p: CardProps) {
           pass={a.pass}
           directionAgreement={a.directionAgreement}
         />
-        <DivergenceTooltip divergenceScore={a.divergenceScore} divergenceType={a.divergenceType} />
+        <DivergenceTooltip divergenceScore={a.divergenceScore} divergenceType={a.divergenceType} pass={a.pass} />
         <Fact
           label="Price"
           value={

@@ -28,7 +28,7 @@ async function fireDailyRun() {
   dailyRunning = true;
   try {
     const { runIngest } = await import("@/lib/ingest");
-    const { submitVerifierBatch, pickMarketsForOpusFirstPass } = await import("@/lib/batch");
+    const { submitVerifierBatch, submitObviousBatch, pickMarketsForOpusFirstPass } = await import("@/lib/batch");
     const { ensureSettings } = await import("@/lib/bootstrap");
     const { embedPendingMarkets } = await import("@/lib/embeddings");
     const { prisma } = await import("@/lib/prisma");
@@ -45,15 +45,30 @@ async function fireDailyRun() {
       } catch (e) {
         console.error(`[scheduler] embedPendingMarkets failed:`, String(e).slice(0, 200));
       }
-      // Scenario A: Opus 4.7 + web_search + sibling context on every eligible market. Single
-      // batch per day, no separate first-pass / escalation. Calibrated 2026-05-29: ~$27/day
-      // at 2000 markets, ~10x more candidate flags than Sonnet→escalation triage at similar
-      // total spend. See conversation 2026-05-29 for cost analysis.
+      // Daily dual-batch pipeline:
+      //   1. VERIFIER (fineprint) — Opus 4.7 + ws + sibling context, asks "do the rules diverge
+      //      from the lay reading in a way casual bettors miss?"
+      //   2. OBVIOUS (mispricings) — Opus 4.7 + ws, no sibling context, asks "does world state
+      //      already determine the outcome in a way the price doesn't reflect?"
+      // Both batches run on the SAME 2000-market candidate pool. Combined cost ~$52/day, with
+      // separate ingestion (verifier → pass='opus', obvious → pass='obvious') so the UI can
+      // surface them as Opportunities vs Mispricings tabs. Calibrated 2026-05-29.
       const markets = await pickMarketsForOpusFirstPass(2000);
-      let batchId: string | null = null;
+      let verifierBatchId: string | null = null;
+      let obviousBatchId: string | null = null;
       if (markets.length > 0) {
-        batchId = await submitVerifierBatch(markets);
-        console.log(`[scheduler] Opus+ws batch ${batchId} submitted (${markets.length} markets)`);
+        try {
+          verifierBatchId = await submitVerifierBatch(markets);
+          console.log(`[scheduler] verifier (fineprint) batch ${verifierBatchId} submitted (${markets.length} markets)`);
+        } catch (e) {
+          console.error(`[scheduler] verifier batch submit failed:`, String(e).slice(0, 200));
+        }
+        try {
+          obviousBatchId = await submitObviousBatch(markets);
+          console.log(`[scheduler] obvious (mispricings) batch ${obviousBatchId} submitted (${markets.length} markets)`);
+        } catch (e) {
+          console.error(`[scheduler] obvious batch submit failed:`, String(e).slice(0, 200));
+        }
       } else {
         console.log(`[scheduler] no markets to analyze; skipping batch submission`);
       }

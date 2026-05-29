@@ -732,7 +732,7 @@ export default function MarketDetailPage() {
                 )}
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <Detail label="Mismatch score" value={`${a.divergenceScore}/10`} />
+                <Detail label={a.pass === "obvious" ? "Confidence" : "Mismatch score"} value={`${a.divergenceScore}/10`} />
                 <Detail label="True odds estimate" value={a.ruleImpliedProbability != null ? `${(a.ruleImpliedProbability * 100).toFixed(0)}%` : "—"} />
                 <Detail label="Expected YES payout" value={a.expectedYesPayoutCents != null ? `${a.expectedYesPayoutCents.toFixed(0)}¢` : "—"} />
                 <Detail label="Expected NO payout" value={a.expectedNoPayoutCents != null ? `${a.expectedNoPayoutCents.toFixed(0)}¢` : "—"} />
@@ -851,7 +851,7 @@ function ModelEvidencePanel({ label, analysis, accent }: { label: string; analys
         <span className={cn("text-xs font-semibold mono shrink-0", directionColor)}>{directionLabel}</span>
       </div>
       <div className="text-[10px] uppercase tracking-wider text-[var(--text-dim)] flex items-center gap-3 flex-wrap">
-        <span>Mismatch <span className="mono text-[var(--text)]">{analysis.divergenceScore}/10</span></span>
+        <span>{analysis.pass === "obvious" ? "Confidence" : "Mismatch"} <span className="mono text-[var(--text)]">{analysis.divergenceScore}/10</span></span>
         <span>·</span>
         <span>Model <span className="text-[var(--text)]">{analysis.model.replace(/^claude-|^gpt-|^o3-/, "")}</span></span>
         <span>·</span>

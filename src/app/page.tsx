@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Sparkles, X } from "lucide-react";
+import { Search, X, FileText, Globe } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { OpportunityCard } from "@/components/OpportunityCard";
 import { OpportunityRow } from "@/components/OpportunityRow";
@@ -12,6 +12,7 @@ import { ViewSwitcher, type ViewMode } from "@/components/ViewSwitcher";
 type Sort = "edge" | "votes" | "endDate" | "liquidity" | "divergence" | "recent";
 type Side = "" | "YES" | "NO";
 type VerifyStage = "" | "synthesis" | "synthesis_agreed" | "synthesis_disagreed" | "opus_only" | "initial";
+type Category = "opportunities" | "mispricings";
 const VERIFY_STAGE_LABELS: Record<VerifyStage, string> = {
   "": "any verification",
   synthesis: "both models run",
@@ -21,8 +22,23 @@ const VERIFY_STAGE_LABELS: Record<VerifyStage, string> = {
   initial: "first-pass only",
 };
 const VIEW_STORAGE_KEY = "fineprint_view_mode";
+const CATEGORY_STORAGE_KEY = "fineprint_category";
+
+const COPY = {
+  opportunities: {
+    title: "Today's opportunities",
+    description: "Markets where the rules quietly say something different from what most bettors see. We read the fine print, you decide.",
+    emptyHint: "No fineprint divergences match your filters today.",
+  },
+  mispricings: {
+    title: "Today's mispricings",
+    description: "Markets where current reality already strongly determines the outcome but the price hasn't caught up. World state vs price — Opus + web search reads the news, you decide.",
+    emptyHint: "No world-state mispricings match your filters today.",
+  },
+} as const;
 
 export default function Home() {
+  const [category, setCategory] = useState<Category>("opportunities");
   const [sort, setSort] = useState<Sort>("edge");
   const [q, setQ] = useState("");
   const [minScore, setMinScore] = useState(15);
@@ -30,6 +46,27 @@ export default function Home() {
   const [side, setSide] = useState<Side>("");
   const [verifyStage, setVerifyStage] = useState<VerifyStage>("");
   const [view, setView] = useState<ViewMode>("cards");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const c = localStorage.getItem(CATEGORY_STORAGE_KEY);
+    if (c === "opportunities" || c === "mispricings") setCategory(c);
+  }, []);
+
+  function changeCategory(next: Category) {
+    setCategory(next);
+    if (typeof window !== "undefined") localStorage.setItem(CATEGORY_STORAGE_KEY, next);
+    // When switching tabs, retune the divergence threshold to category-appropriate defaults
+    // (since divergence in fineprint context means "rules-vs-vibe gap" 0-10 and in mispricings
+    // context means "confidence" 0-10 — they're scored on similar scales but the meaningful
+    // floors differ).
+    if (next === "mispricings") {
+      setMinDivergence(6);
+      setVerifyStage("");
+    } else {
+      setMinDivergence(6);
+    }
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -43,15 +80,16 @@ export default function Home() {
   }
 
   const { data, isLoading } = useQuery({
-    queryKey: ["markets", sort, q, minScore, minDivergence, side, verifyStage],
+    queryKey: ["markets", category, sort, q, minScore, minDivergence, side, verifyStage],
     queryFn: async () => {
       const params = new URLSearchParams({
+        category,
         sort,
         minScore: String(minScore),
         minDivergence: String(minDivergence),
         ...(q ? { q } : {}),
         ...(side ? { direction: side } : {}),
-        ...(verifyStage ? { verifyStage } : {}),
+        ...(category === "opportunities" && verifyStage ? { verifyStage } : {}),
       });
       const res = await fetch(`/api/markets?${params}`);
       if (!res.ok) throw new Error("fetch failed");
@@ -64,10 +102,10 @@ export default function Home() {
   });
 
   const activeFilters = [
-    minDivergence > 0 ? `divergence ≥ ${minDivergence}` : null,
+    minDivergence > 0 ? `${category === "mispricings" ? "confidence" : "divergence"} ≥ ${minDivergence}` : null,
     minScore > 0 ? `score ≥ ${minScore}` : null,
     side ? `bet ${side}` : null,
-    verifyStage ? VERIFY_STAGE_LABELS[verifyStage] : null,
+    category === "opportunities" && verifyStage ? VERIFY_STAGE_LABELS[verifyStage] : null,
   ].filter(Boolean);
 
   function resetFilters() {
@@ -82,12 +120,30 @@ export default function Home() {
     <AppShell>
       <OnboardingDialog />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Category tabs */}
+        <div className="flex items-center gap-1 mb-5 border-b border-[var(--border)]">
+          <CategoryTab
+            label="Opportunities"
+            sublabel="Fineprint vs. vibe"
+            icon={<FileText className="w-4 h-4" />}
+            active={category === "opportunities"}
+            onClick={() => changeCategory("opportunities")}
+          />
+          <CategoryTab
+            label="Mispricings"
+            sublabel="World state vs. price"
+            icon={<Globe className="w-4 h-4" />}
+            active={category === "mispricings"}
+            onClick={() => changeCategory("mispricings")}
+          />
+        </div>
+
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
-            Today&apos;s opportunities
+            {COPY[category].title}
           </h1>
           <p className="text-sm sm:text-base text-[var(--text-muted)] mt-1.5 max-w-2xl">
-            Markets where the rules quietly say something different from what most bettors see. We read the fine print, you decide.
+            {COPY[category].description}
           </p>
         </div>
 
@@ -98,7 +154,7 @@ export default function Home() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search opportunities…"
+              placeholder={category === "mispricings" ? "Search mispricings…" : "Search opportunities…"}
               className="bg-transparent outline-none text-sm flex-1 placeholder:text-[var(--text-dim)] w-full"
             />
             <div className="shrink-0">
@@ -115,15 +171,25 @@ export default function Home() {
               { value: "liquidity", label: "Most liquid" },
               { value: "recent", label: "Recently found" },
             ]} />
-            <Filter label="Min divergence" value={String(minDivergence)} onChange={(v) => setMinDivergence(Number(v))} options={[
-              { value: "0", label: "Any" },
-              { value: "4", label: "≥ 4 (minor+)" },
-              { value: "5", label: "≥ 5" },
-              { value: "6", label: "≥ 6 (real)" },
-              { value: "7", label: "≥ 7 (clear)" },
-              { value: "8", label: "≥ 8" },
-              { value: "9", label: "≥ 9 (dramatic)" },
-            ]} />
+            {category === "opportunities" ? (
+              <Filter label="Min divergence" value={String(minDivergence)} onChange={(v) => setMinDivergence(Number(v))} options={[
+                { value: "0", label: "Any" },
+                { value: "4", label: "≥ 4 (minor+)" },
+                { value: "5", label: "≥ 5" },
+                { value: "6", label: "≥ 6 (real)" },
+                { value: "7", label: "≥ 7 (clear)" },
+                { value: "8", label: "≥ 8" },
+                { value: "9", label: "≥ 9 (dramatic)" },
+              ]} />
+            ) : (
+              <Filter label="Min confidence" value={String(minDivergence)} onChange={(v) => setMinDivergence(Number(v))} options={[
+                { value: "5", label: "≥ 5 (some evidence)" },
+                { value: "6", label: "≥ 6 (real signal)" },
+                { value: "7", label: "≥ 7 (strong)" },
+                { value: "8", label: "≥ 8" },
+                { value: "9", label: "≥ 9 (primary source)" },
+              ]} />
+            )}
             <Filter label="Min score" value={String(minScore)} onChange={(v) => setMinScore(Number(v))} options={[
               { value: "0", label: "Any" },
               { value: "15", label: "≥ 15" },
@@ -136,25 +202,27 @@ export default function Home() {
               { value: "YES", label: "YES only" },
               { value: "NO", label: "NO only" },
             ]} />
-            <Filter label="Verification" value={verifyStage} onChange={(v) => {
-              const next = v as VerifyStage;
-              setVerifyStage(next);
-              // The synthesis pass deliberately lowers divergence_score when models disagree
-              // (max 5, often 3-4), so the default ≥6 silently hides them. When the user is
-              // explicitly asking for these signals, drop the min filters so the markets they
-              // selected actually appear. Reset button restores defaults.
-              if (next === "synthesis" || next === "synthesis_agreed" || next === "synthesis_disagreed") {
-                setMinScore(0);
-                setMinDivergence(0);
-              }
-            }} options={[
-              { value: "", label: "Any" },
-              { value: "synthesis", label: "Both models run" },
-              { value: "synthesis_agreed", label: "Both models agree" },
-              { value: "synthesis_disagreed", label: "Models disagree" },
-              { value: "opus_only", label: "Opus only (no GPT)" },
-              { value: "initial", label: "First-pass only" },
-            ]} />
+            {category === "opportunities" && (
+              <Filter label="Verification" value={verifyStage} onChange={(v) => {
+                const next = v as VerifyStage;
+                setVerifyStage(next);
+                // The synthesis pass deliberately lowers divergence_score when models disagree
+                // (max 5, often 3-4), so the default ≥6 silently hides them. When the user is
+                // explicitly asking for these signals, drop the min filters so the markets they
+                // selected actually appear. Reset button restores defaults.
+                if (next === "synthesis" || next === "synthesis_agreed" || next === "synthesis_disagreed") {
+                  setMinScore(0);
+                  setMinDivergence(0);
+                }
+              }} options={[
+                { value: "", label: "Any" },
+                { value: "synthesis", label: "Both models run" },
+                { value: "synthesis_agreed", label: "Both models agree" },
+                { value: "synthesis_disagreed", label: "Models disagree" },
+                { value: "opus_only", label: "Opus only (no GPT)" },
+                { value: "initial", label: "First-pass only" },
+              ]} />
+            )}
             {activeFilters.length > 0 && (
               <button onClick={resetFilters} className="ml-auto text-xs text-[var(--text-muted)] hover:text-[var(--text)] inline-flex items-center gap-1 px-2 py-1 rounded-md hover:bg-[var(--bg-overlay)]">
                 <X className="w-3 h-3" /> Reset
@@ -175,11 +243,11 @@ export default function Home() {
             </div>
           )
         ) : data?.markets.length === 0 ? (
-          <EmptyState onReset={resetFilters} />
+          <EmptyState onReset={resetFilters} category={category} />
         ) : (
           <>
             <div className="text-xs text-[var(--text-dim)] mb-3 flex items-center gap-2 flex-wrap">
-              <span>Showing {data?.markets.length} of {data?.total} opportunities</span>
+              <span>Showing {data?.markets.length} of {data?.total} {category === "mispricings" ? "mispricings" : "opportunities"}</span>
               {activeFilters.length > 0 && (
                 <>
                   <span>·</span>
@@ -209,6 +277,25 @@ export default function Home() {
   );
 }
 
+function CategoryTab({ label, sublabel, icon, active, onClick }: { label: string; sublabel: string; icon: React.ReactNode; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`group relative inline-flex items-center gap-2 px-4 sm:px-5 py-3 -mb-px border-b-2 transition-colors ${
+        active
+          ? "border-[var(--accent)] text-[var(--text)]"
+          : "border-transparent text-[var(--text-muted)] hover:text-[var(--text)]"
+      }`}
+    >
+      <span className={active ? "text-[var(--accent)]" : ""}>{icon}</span>
+      <span className="flex flex-col items-start leading-tight">
+        <span className="text-sm font-medium">{label}</span>
+        <span className="text-[10px] tracking-wider uppercase text-[var(--text-dim)]">{sublabel}</span>
+      </span>
+    </button>
+  );
+}
+
 function Filter({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   const isDefault = options[0]?.value === value;
   return (
@@ -227,13 +314,18 @@ function Filter({ label, value, onChange, options }: { label: string; value: str
   );
 }
 
-function EmptyState({ onReset }: { onReset: () => void }) {
+function EmptyState({ onReset, category }: { onReset: () => void; category?: Category }) {
+  const hint = category === "mispricings"
+    ? "No world-state mispricings match these filters today."
+    : "No fineprint opportunities match these filters today.";
   return (
     <div className="card p-10 sm:p-16 text-center">
-      <Sparkles className="w-10 h-10 text-[var(--text-dim)] mx-auto mb-4" />
-      <h3 className="text-lg font-medium mb-1">No opportunities match these filters</h3>
+      <div className="w-10 h-10 mx-auto mb-4 text-[var(--text-dim)] flex items-center justify-center">
+        {category === "mispricings" ? <Globe className="w-10 h-10" /> : <FileText className="w-10 h-10" />}
+      </div>
+      <h3 className="text-lg font-medium mb-1">Nothing to surface right now</h3>
       <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto mb-4">
-        Try widening the filters or check back after the next daily run.
+        {hint} Try widening the filters or check back after the next daily run.
       </p>
       <button onClick={onReset} className="btn btn-primary">Reset filters</button>
     </div>

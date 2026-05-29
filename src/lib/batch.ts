@@ -7,7 +7,14 @@ import { llmCallsEnabled, LLMDisabledError } from "./llm-gate";
 import { findSimilarClosedMarkets } from "./embeddings";
 import type { Market } from "@prisma/client";
 
-const BATCH_DISCOUNT = 0.5;
+// Effective batch discount applied to this account. The published rate card says 50% off
+// for Batch API, but empirical measurement against Anthropic Console billing (2026-05-29:
+// $26.81 actual vs $54 predicted at 0.5 for the scenario-a 2000-market Opus+ws run)
+// indicates the real discount applied here is ~75%. This may be an automatic volume tier
+// or undocumented enterprise rate. If logged costs drift back upward against the dashboard,
+// reset to 0.5 and re-investigate. Per-call calibration with inline Opus (2026-05-29) showed
+// the non-batch rates ARE accurate as documented; the discrepancy is batch-specific.
+const BATCH_DISCOUNT = 0.25;
 const VERIFIER_PURPOSE = "verifier_pass";
 const FIRST_PASS_PURPOSES = new Set(["first_pass", "first_pass_haiku", "first_pass_sonnet"]);
 

@@ -67,7 +67,8 @@ async function main() {
       });
 
       let discountFactor = 1.0;
-      if (row.purpose.endsWith("_batch")) discountFactor = 0.5;
+      // Matches BATCH_DISCOUNT in src/lib/batch.ts — empirically 75% off, not the documented 50%.
+      if (row.purpose.endsWith("_batch")) discountFactor = 0.25;
       const adjusted = newTokenCost * discountFactor;
 
       const ne = newTotalByPurpose.get(key) ?? { new: 0 };

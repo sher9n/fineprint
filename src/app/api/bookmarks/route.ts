@@ -25,8 +25,32 @@ export async function GET(_req: NextRequest) {
       market: {
         include: {
           // No eager vote include — we fetch votes once per page slice (latest analyses only)
-          // after we've decided which markets to render.
-          analyses: { orderBy: { createdAt: "desc" }, take: 8 },
+          // after we've decided which markets to render. Heavy TEXT fields (reasoning,
+          // sourceFindings, verificationSteps) excluded — cards don't render them.
+          analyses: {
+            orderBy: { createdAt: "desc" },
+            take: 8,
+            select: {
+              id: true,
+              pass: true,
+              model: true,
+              rulesHash: true,
+              divergenceScore: true,
+              divergenceType: true,
+              edgeDirection: true,
+              betSide: true,
+              priceGap: true,
+              directionAgreement: true,
+              edgeScore: true,
+              ruleImpliedProbability: true,
+              expectedYesPayoutCents: true,
+              expectedNoPayoutCents: true,
+              vibeInterpretation: true,
+              literalInterpretation: true,
+              yesPriceAtAnalysis: true,
+              createdAt: true,
+            },
+          },
         },
       },
     },

@@ -73,10 +73,33 @@ export async function GET(req: NextRequest) {
     },
     include: {
       // Small history so we can find the latest of each pass for the current rulesHash
-      // (used to compute the synthesis / agreement badge).
+      // (used to compute the synthesis / agreement badge). The TEXT fields (reasoning,
+      // sourceFindings, verificationSteps) are deliberately EXCLUDED here — they can be
+      // 1-5KB each and 8 analyses × up to 1500 markets explodes the pulled bytes; cards
+      // don't render them anyway, and detail pages fetch their own analyses separately.
       analyses: {
         orderBy: { createdAt: "desc" },
         take: 8,
+        select: {
+          id: true,
+          pass: true,
+          model: true,
+          rulesHash: true,
+          divergenceScore: true,
+          divergenceType: true,
+          edgeDirection: true,
+          betSide: true,
+          priceGap: true,
+          directionAgreement: true,
+          edgeScore: true,
+          ruleImpliedProbability: true,
+          expectedYesPayoutCents: true,
+          expectedNoPayoutCents: true,
+          vibeInterpretation: true,
+          literalInterpretation: true,
+          yesPriceAtAnalysis: true,
+          createdAt: true,
+        },
       },
     },
     orderBy: { liquidity: "desc" },

@@ -108,17 +108,28 @@ export default function MarketDetailPage() {
   });
 
   // Live price from Polymarket Gamma. Refetched every 60s when the page is open; server-side
-  // cache is 30s so duplicate page views share one Gamma call. Falls back gracefully to the DB
-  // price (m.yesPrice / m.noPrice from the last ingest) if the live fetch fails.
+  // cache is 30s so duplicate page views share one Gamma call. refetchOnMount='always' so the
+  // user gets fresh prices every time they navigate to a market page, not stale cached ones.
+  // Falls back gracefully to the DB midpoints if the live fetch fails.
   const { data: liveData, refetch: refetchLive, isFetching: isFetchingLive } = useQuery({
     queryKey: ["live-price", id],
     queryFn: async () => {
       const res = await fetch(`/api/markets/${id}/live-price`);
       if (!res.ok) return null;
-      return (await res.json()) as { yesPrice: number | null; noPrice: number | null; active: boolean; closed: boolean; fetchedAt: string };
+      return (await res.json()) as {
+        yesPrice: number | null;
+        noPrice: number | null;
+        yesAsk: number | null;
+        noAsk: number | null;
+        spread: number | null;
+        active: boolean;
+        closed: boolean;
+        fetchedAt: string;
+      };
     },
     refetchInterval: 60_000,
     staleTime: 30_000,
+    refetchOnMount: "always",
     retry: 1,
   });
 
@@ -301,8 +312,12 @@ export default function MarketDetailPage() {
   //   liveYes / liveNo   - what Polymarket is showing right now (≤30s stale via server cache)
   //   m.yesPrice / m.noPrice - what our last ingest captured (typically <24h old)
   //   a.yesPriceAtAnalysis / a.noPriceAtAnalysis - what the model used to compute its verdict
-  const liveYes = liveData?.yesPrice ?? null;
-  const liveNo = liveData?.noPrice ?? null;
+  //
+  // For the user-facing recommendation we prefer the ASK (yesAsk / noAsk) — that's what
+  // Polymarket's Buy column actually charges and includes the bid-ask spread. Midpoints
+  // (yesPrice / noPrice) are kept for probability-based math (rule_p alignment, scenarios).
+  const liveYes = liveData?.yesAsk ?? liveData?.yesPrice ?? null;
+  const liveNo = liveData?.noAsk ?? liveData?.noPrice ?? null;
   const effectiveYes = liveYes ?? m.yesPrice;
   const effectiveNo = liveNo ?? m.noPrice;
 
@@ -768,11 +783,15 @@ function LivePriceBadge({
   isFetching,
   onRefresh,
 }: {
-  liveData: { yesPrice: number | null; noPrice: number | null; fetchedAt: string } | null | undefined;
+  liveData: { yesPrice: number | null; noPrice: number | null; yesAsk?: number | null; noAsk?: number | null; fetchedAt: string } | null | undefined;
   isFetching: boolean;
   onRefresh: () => void;
 }) {
-  if (!liveData || (liveData.yesPrice == null && liveData.noPrice == null)) {
+  // Prefer the buy-side ask (matches Polymarket's UI) and fall back to the midpoint when the
+  // orderbook hasn't returned a usable bid/ask (rare, but happens on thin markets).
+  const yesFraction = liveData?.yesAsk ?? liveData?.yesPrice ?? null;
+  const noFraction = liveData?.noAsk ?? liveData?.noPrice ?? null;
+  if (!liveData || (yesFraction == null && noFraction == null)) {
     return (
       <button
         onClick={onRefresh}
@@ -785,8 +804,8 @@ function LivePriceBadge({
       </button>
     );
   }
-  const yesCents = liveData.yesPrice != null ? Math.round(liveData.yesPrice * 100) : null;
-  const noCents = liveData.noPrice != null ? Math.round(liveData.noPrice * 100) : null;
+  const yesCents = yesFraction != null ? (yesFraction * 100).toFixed(1).replace(/\.0$/, "") : null;
+  const noCents = noFraction != null ? (noFraction * 100).toFixed(1).replace(/\.0$/, "") : null;
   const ageSec = Math.max(0, Math.round((Date.now() - new Date(liveData.fetchedAt).getTime()) / 1000));
   return (
     <button

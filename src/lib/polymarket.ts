@@ -19,6 +19,9 @@ export interface RawMarket {
   volume?: string | number;
   outcomes?: string | string[];
   outcomePrices?: string | string[];
+  bestBid?: number | string;
+  bestAsk?: number | string;
+  spread?: number | string;
   active?: boolean;
   closed?: boolean;
   archived?: boolean;
@@ -62,6 +65,13 @@ export interface NormalizedMarket {
   outcomePrices: number[];
   yesPrice: number | null;
   noPrice: number | null;
+  // Order-book derived buy-side prices. yesAsk = lowest someone will sell YES for (= what you
+  // pay to buy YES). noAsk = 1 - bestBid (because buying NO == taking the YES bid). These reflect
+  // what Polymarket's UI shows in the Buy column and what the user actually pays, including
+  // the bid-ask spread. They do NOT sum to 1.0 (they sum to 1 + spread).
+  yesAsk: number | null;
+  noAsk: number | null;
+  spread: number | null;
   active: boolean;
   closed: boolean;
   imageUrl: string | null;
@@ -94,6 +104,9 @@ export function normalize(raw: RawMarket): NormalizedMarket | null {
     outcomePrices: prices,
     yesPrice: yesIdx >= 0 && prices[yesIdx] != null ? prices[yesIdx] : null,
     noPrice: noIdx >= 0 && prices[noIdx] != null ? prices[noIdx] : null,
+    yesAsk: raw.bestAsk != null ? toNumber(raw.bestAsk) : null,
+    noAsk: raw.bestBid != null ? 1 - toNumber(raw.bestBid) : null,
+    spread: raw.spread != null ? toNumber(raw.spread) : null,
     active: raw.active !== false,
     closed: raw.closed === true,
     imageUrl: raw.image || raw.icon || null,

@@ -25,6 +25,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({
       yesPrice: n.yesPrice,
       noPrice: n.noPrice,
+      yesAsk: n.yesAsk,
+      noAsk: n.noAsk,
+      spread: n.spread,
       active: n.active,
       closed: n.closed,
       fetchedAt: new Date().toISOString(),

@@ -139,11 +139,24 @@ export async function fetchMarketById(id: string): Promise<RawMarket | null> {
   // Use the listing endpoint with an id filter instead of /markets/{id}. The single-market
   // endpoint omits the `events` array, which means reconciliation silently strips a market's
   // event association on every refetch. The listing form preserves it.
-  const url = `${GAMMA_URL}/markets?id=${encodeURIComponent(id)}&limit=1`;
-  const res = await fetch(url, { headers: { accept: "application/json" } });
-  if (!res.ok) throw new Error(`gamma fetch ${id} ${res.status}: ${await res.text().catch(() => "")}`);
-  const data = (await res.json()) as RawMarket[] | null;
-  if (!Array.isArray(data) || data.length === 0) return null;
+  //
+  // Quirk: the listing endpoint defaults to open markets only — `?id=X&limit=1` returns []
+  // for resolved markets. Surfaced 2026-05-29 when the Sinner French Open market resolved
+  // but our reconcile silently skipped it because the open-only listing returned [], and
+  // upserted nothing. Result: 1,240 closed-but-not-reconciled markets accumulated in the DB.
+  // Fix: if the open-listing call returns empty, retry with closed=true. Both forms preserve
+  // the events array; the single-market endpoint does not.
+  async function fetchOne(extraQS: string): Promise<RawMarket[]> {
+    const url = `${GAMMA_URL}/markets?id=${encodeURIComponent(id)}${extraQS}&limit=1`;
+    const res = await fetch(url, { headers: { accept: "application/json" } });
+    if (!res.ok) throw new Error(`gamma fetch ${id} ${res.status}: ${await res.text().catch(() => "")}`);
+    const data = (await res.json()) as RawMarket[] | null;
+    return Array.isArray(data) ? data : [];
+  }
+
+  let data = await fetchOne("");
+  if (data.length === 0) data = await fetchOne("&closed=true");
+  if (data.length === 0) return null;
   const first = data[0];
   return first && first.id ? first : null;
 }

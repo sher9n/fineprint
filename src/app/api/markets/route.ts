@@ -57,6 +57,12 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Performance: this endpoint used to over-fetch (5000 markets × 8 analyses × every vote on
+  // each = 200K+ rows over the Railway public proxy → ~3s per call). Two cuts:
+  //   1. Cap at 1500 markets (still well above what passes the filters in practice; markets are
+  //      pulled by liquidity desc and the long tail rarely meets edgeScore >= 20).
+  //   2. Drop votes from the broad include. Vote counts are joined in for ONLY the page slice
+  //      after filter+sort+limit (handful of markets, not thousands).
   const markets = await prisma.market.findMany({
     where: {
       active: true,
@@ -71,11 +77,10 @@ export async function GET(req: NextRequest) {
       analyses: {
         orderBy: { createdAt: "desc" },
         take: 8,
-        include: { votes: true },
       },
     },
     orderBy: { liquidity: "desc" },
-    take: 5000,
+    take: 1500,
   });
 
   const enriched = markets
@@ -156,13 +161,30 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Pull votes only for analyses that survived the filter — usually <100 markets vs the 1500
+  // we scanned, so this is cheap. Stored as a per-analysis map for sort + response use.
+  type VoteRow = { id: string; userId: string; direction: number; analysisId: string };
+  const votesByAnalysisId = new Map<string, VoteRow[]>();
+  const analysisIds = enriched.map((e) => e.latest?.id).filter((x): x is string => !!x);
+  if (analysisIds.length > 0) {
+    const rows = await prisma.vote.findMany({
+      where: { analysisId: { in: analysisIds } },
+      select: { id: true, userId: true, direction: true, analysisId: true },
+    });
+    for (const r of rows) {
+      const arr = votesByAnalysisId.get(r.analysisId) ?? [];
+      arr.push(r);
+      votesByAnalysisId.set(r.analysisId, arr);
+    }
+  }
+
   enriched.sort((a, b) => {
     if (sort === "edge") return (b.latest?.edgeScore ?? 0) - (a.latest?.edgeScore ?? 0);
     if (sort === "divergence") return (b.latest?.divergenceScore ?? 0) - (a.latest?.divergenceScore ?? 0);
     if (sort === "liquidity") return b.market.liquidity - a.market.liquidity;
     if (sort === "votes") {
-      const av = (a.latest?.votes ?? []).reduce((s, v) => s + v.direction, 0);
-      const bv = (b.latest?.votes ?? []).reduce((s, v) => s + v.direction, 0);
+      const av = (a.latest ? votesByAnalysisId.get(a.latest.id) ?? [] : []).reduce((s, v) => s + v.direction, 0);
+      const bv = (b.latest ? votesByAnalysisId.get(b.latest.id) ?? [] : []).reduce((s, v) => s + v.direction, 0);
       return bv - av;
     }
     if (sort === "endDate") {
@@ -189,7 +211,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     category,
     markets: sliced.map(({ market, latest, verifyStage }) => {
-      const votes = latest?.votes ?? [];
+      const votes = latest ? votesByAnalysisId.get(latest.id) ?? [] : [];
       const upvotes = votes.filter((v) => v.direction > 0).length;
       const downvotes = votes.filter((v) => v.direction < 0).length;
       const myVote = userId ? votes.find((v) => v.userId === userId)?.direction ?? 0 : 0;

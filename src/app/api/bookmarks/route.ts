@@ -24,15 +24,32 @@ export async function GET(_req: NextRequest) {
     include: {
       market: {
         include: {
-          analyses: {
-            orderBy: { createdAt: "desc" },
-            take: 8,
-            include: { votes: true },
-          },
+          // No eager vote include — we fetch votes once per page slice (latest analyses only)
+          // after we've decided which markets to render.
+          analyses: { orderBy: { createdAt: "desc" }, take: 8 },
         },
       },
     },
   });
+
+  // Pull votes for the headline (latest current-rules) analysis of each bookmarked market in
+  // one round-trip rather than includeing them on every analysis row.
+  type VoteRow = { userId: string; direction: number; analysisId: string };
+  const latestAnalysisIds: string[] = [];
+  for (const { market: m } of bookmarks) {
+    const current = m.analyses.filter((x) => x.rulesHash === m.rulesHash);
+    const a = current[0] ?? m.analyses[0];
+    if (a) latestAnalysisIds.push(a.id);
+  }
+  const voteRows: VoteRow[] = latestAnalysisIds.length
+    ? await prisma.vote.findMany({ where: { analysisId: { in: latestAnalysisIds } }, select: { userId: true, direction: true, analysisId: true } })
+    : [];
+  const votesByAnalysisId = new Map<string, VoteRow[]>();
+  for (const v of voteRows) {
+    const arr = votesByAnalysisId.get(v.analysisId) ?? [];
+    arr.push(v);
+    votesByAnalysisId.set(v.analysisId, arr);
+  }
 
   const markets = bookmarks.map(({ market: m, createdAt: bookmarkedAt }) => {
     const findCurrent = (p: string) => m.analyses.find((x) => x.pass === p && x.rulesHash === m.rulesHash);
@@ -54,7 +71,7 @@ export async function GET(_req: NextRequest) {
     else if (opusA) verifyStage = "opus_only";
     else if (gptA) verifyStage = "gpt_only";
 
-    const votes = latest?.votes ?? [];
+    const votes = latest ? votesByAnalysisId.get(latest.id) ?? [] : [];
     const upvotes = votes.filter((v) => v.direction > 0).length;
     const downvotes = votes.filter((v) => v.direction < 0).length;
     const myVote = votes.find((v) => v.userId === userId)?.direction ?? 0;

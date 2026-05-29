@@ -7,7 +7,9 @@
  * larger pool than usual.
  *
  * Bypasses submitVerifierBatch's budget gate (the $0.30/market estimate is stale and would
- * fail; real refined cost is ~$0.094/market). Cost still bounded by the explicit N cap.
+ * fail; real refined cost is ~$0.013/market after the 2026-05-29 BATCH_DISCOUNT calibration
+ * to 0.25 — Anthropic appears to give an empirical 75% off on batch rather than the
+ * documented 50%). Cost still bounded by the explicit N cap.
  *
  * Run:
  *   DATABASE_URL='<railway>' npx tsx scripts/scenario-a-pass.ts
@@ -114,7 +116,7 @@ async function main() {
   });
   console.log(`[scenario-a] BatchJob row written to prod — production scheduler will poll/ingest.\n`);
 
-  console.log(`Estimated cost at refined $0.094/call: $${(picked.length * 0.094).toFixed(2)}`);
+  console.log(`Estimated cost at calibrated $0.013/call: $${(picked.length * 0.013).toFixed(2)}`);
   console.log(`\nMonitor:`);
   console.log(`  - Anthropic Console > Batches > ${batch.id}`);
   console.log(`  - When batch ends, production scheduler will ingest within 5 min`);

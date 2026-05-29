@@ -164,9 +164,10 @@ export async function submitHaikuBatch(markets: Market[], opts: { purpose?: stri
 }
 
 // Per-market budget-gate estimate for Opus verifier with web_search. Calibrated against
-// real Anthropic Console billing (2026-05-29): scenario-A pass of 2000 markets billed $26.81
-// = ~$0.013/call. Conservative gate at 2.3x real, so worst-case anomaly trips the gate while
-// normal runs pass. Refresh if real cost shifts persistently.
+// real Anthropic Console billing (2026-05-29 small + large calibration runs): real per-call
+// floats $0.013-$0.0144 depending on web_search count and batch size. Gate at $0.03 gives
+// ~2x headroom over the high end while leaving room for normal variability. Includes a 10%
+// safety margin over CostLog estimates which tend to under-predict by 5-10%.
 const VERIFIER_COST_ESTIMATE_PER_MARKET = 0.03;
 
 export async function submitVerifierBatch(markets: Market[], opts: { purpose?: string } = {}): Promise<string> {

@@ -57,26 +57,44 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Performance: this endpoint used to over-fetch (5000 markets × 8 analyses × every vote on
-  // each = 200K+ rows over the Railway public proxy → ~3s per call). Two cuts:
-  //   1. Cap at 1500 markets (still well above what passes the filters in practice; markets are
-  //      pulled by liquidity desc and the long tail rarely meets edgeScore >= 20).
-  //   2. Drop votes from the broad include. Vote counts are joined in for ONLY the page slice
-  //      after filter+sort+limit (handful of markets, not thousands).
-  const markets = await prisma.market.findMany({
+  // Performance: filter at the SQL level using the indexes on Analysis.edgeScore and
+  // Analysis.divergenceScore. Old approach pulled 1500 markets × 8 analyses with all their
+  // TEXT just to filter most out in JS — even after trimming heavy TEXT fields it stayed
+  // ~1.5s per call. New approach:
+  //   1. Find distinct candidate marketIds whose analyses pass the threshold (uses indexes).
+  //   2. Fetch only those markets (typically <200 vs 1500) with their light-field analyses.
+  // Cards never render reasoning/sourceFindings/verificationSteps so those are deliberately
+  // excluded from the select.
+  const analysisPassFilter = category === "mispricings"
+    ? { pass: "obvious", edgeDirection: { not: "NONE" } }
+    : { pass: { in: ["opus", "synthesis", "gpt_deep", "haiku"] } };
+
+  const candidateAnalyses = await prisma.analysis.findMany({
     where: {
-      active: true,
-      closed: false,
-      OR: [{ endDate: null }, { endDate: { gt: new Date() } }],
-      AND: andClauses,
-      analyses: { some: {} },
+      ...analysisPassFilter,
+      edgeScore: { gte: minScore },
+      divergenceScore: { gte: minDivergence },
+      ...(direction ? { betSide: direction } : {}),
+      market: {
+        active: true,
+        closed: false,
+        OR: [{ endDate: null }, { endDate: { gt: new Date() } }],
+        AND: andClauses,
+      },
     },
+    select: { marketId: true },
+    orderBy: { edgeScore: "desc" },
+    // Cap at 5x the page limit so post-filter JS culling (verifyStage, dedupe) still has
+    // enough headroom even when many candidates lose to a sibling analysis on the same market.
+    take: Math.max(limit * 5, 200),
+  });
+  const candidateIds = Array.from(new Set(candidateAnalyses.map((a) => a.marketId)));
+
+  const markets = candidateIds.length === 0 ? [] : await prisma.market.findMany({
+    where: { id: { in: candidateIds } },
     include: {
       // Small history so we can find the latest of each pass for the current rulesHash
-      // (used to compute the synthesis / agreement badge). The TEXT fields (reasoning,
-      // sourceFindings, verificationSteps) are deliberately EXCLUDED here — they can be
-      // 1-5KB each and 8 analyses × up to 1500 markets explodes the pulled bytes; cards
-      // don't render them anyway, and detail pages fetch their own analyses separately.
+      // (used to compute the synthesis / agreement badge).
       analyses: {
         orderBy: { createdAt: "desc" },
         take: 8,
@@ -102,8 +120,6 @@ export async function GET(req: NextRequest) {
         },
       },
     },
-    orderBy: { liquidity: "desc" },
-    take: 1500,
   });
 
   const enriched = markets

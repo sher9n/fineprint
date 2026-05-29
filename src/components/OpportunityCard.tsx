@@ -196,12 +196,12 @@ export function OpportunityCard(p: CardProps) {
               <TrendingUp className="w-4 h-4 text-[var(--green)]" />
               <span className="text-[11px] uppercase tracking-wider font-medium text-[var(--green)]">The opportunity</span>
             </div>
-            <span className="text-xs font-medium text-[var(--green)] mono">+{(bet.evPercent * 100).toFixed(0)}% expected return</span>
+            <span className="text-xs font-medium text-[var(--green)] mono">+{(((100 - bet.entryCents) / bet.entryCents) * 100).toFixed(0)}% expected return</span>
           </div>
           <p className="text-sm leading-relaxed text-[var(--text)]">
             Buy <strong className={a.betSide === "YES" ? "text-[var(--green)]" : "text-[var(--red)]"}>{a.betSide}</strong> at{" "}
             <strong className="mono">{bet.entryCents.toFixed(0)}¢</strong> per share. If correct, each share pays out about{" "}
-            <strong className="mono">{bet.expectedCents?.toFixed(0)}¢</strong>.
+            <strong className="mono">100¢</strong>.
           </p>
         </div>
       ) : (

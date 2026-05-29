@@ -382,8 +382,8 @@ export default function MarketDetailPage() {
                 </>
               ) : (
                 <>
-                  If correct, each share pays out about <strong className="mono">{bet.expectedCents?.toFixed(0)}¢</strong>{" "}
-                  <span className="text-[var(--green)] font-medium">(+{(bet.evPercent * 100).toFixed(0)}% expected return)</span>.
+                  If correct, each share pays out about <strong className="mono">100¢</strong>{" "}
+                  <span className="text-[var(--green)] font-medium">(+{(((100 - bet.entryCents) / bet.entryCents) * 100).toFixed(0)}% expected return)</span>.
                 </>
               )}
             </p>

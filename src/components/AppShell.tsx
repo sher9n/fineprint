@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useState, type ReactNode } from "react";
 import {
-  Compass, Receipt, Heart, Settings, LogOut, Menu, X, Wrench,
+  Compass, Globe, Receipt, Heart, Settings, LogOut, Menu, X, Wrench,
   History, Gauge, SlidersHorizontal, ChevronDown, User as UserIcon, HelpCircle,
 } from "lucide-react";
 import { Logo } from "./Logo";
@@ -39,6 +39,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Logo size="sm" />
             <nav className="hidden md:flex items-center gap-0.5 ml-3">
               <PrimaryLink href="/" label="Opportunities" icon={Compass} active={path === "/"} />
+              <PrimaryLink href="/mispricings" label="Mispricings" icon={Globe} active={path === "/mispricings"} />
             </nav>
           </div>
 
@@ -118,6 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <nav className="space-y-1 flex-1 overflow-y-auto">
               <MobileLink href="/" label="Opportunities" icon={Compass} active={path === "/"} onClose={() => setMobileNavOpen(false)} />
+              <MobileLink href="/mispricings" label="Mispricings" icon={Globe} active={path === "/mispricings"} onClose={() => setMobileNavOpen(false)} />
               {session && (
                 <>
                   <div className="pt-3 pb-1 px-3 text-[10px] uppercase tracking-wider text-[var(--text-dim)]">Your account</div>

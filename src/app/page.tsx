@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, X, FileText, Globe } from "lucide-react";
+// FileText/Globe stay imported — used by EmptyState below.
 import { AppShell } from "@/components/AppShell";
 import { OpportunityCard } from "@/components/OpportunityCard";
 import { OpportunityRow } from "@/components/OpportunityRow";
@@ -12,7 +13,7 @@ import { ViewSwitcher, type ViewMode } from "@/components/ViewSwitcher";
 type Sort = "edge" | "votes" | "endDate" | "liquidity" | "divergence" | "recent";
 type Side = "" | "YES" | "NO";
 type VerifyStage = "" | "synthesis" | "synthesis_agreed" | "synthesis_disagreed" | "opus_only" | "initial";
-type Category = "opportunities" | "mispricings";
+export type Category = "opportunities" | "mispricings";
 const VERIFY_STAGE_LABELS: Record<VerifyStage, string> = {
   "": "any verification",
   synthesis: "both models run",
@@ -22,7 +23,6 @@ const VERIFY_STAGE_LABELS: Record<VerifyStage, string> = {
   initial: "first-pass only",
 };
 const VIEW_STORAGE_KEY = "fineprint_view_mode";
-const CATEGORY_STORAGE_KEY = "fineprint_category";
 
 const COPY = {
   opportunities: {
@@ -37,8 +37,14 @@ const COPY = {
   },
 } as const;
 
+// Default export: Opportunities (fineprint divergence). The Mispricings route at
+// /mispricings renders the same view with category="mispricings". Category is driven by
+// route, not by tab UI on the page — top nav owns the switch between them.
 export default function Home() {
-  const [category, setCategory] = useState<Category>("opportunities");
+  return <MarketsView category="opportunities" />;
+}
+
+export function MarketsView({ category }: { category: Category }) {
   const [sort, setSort] = useState<Sort>("edge");
   const [q, setQ] = useState("");
   const [minScore, setMinScore] = useState(15);
@@ -46,27 +52,6 @@ export default function Home() {
   const [side, setSide] = useState<Side>("");
   const [verifyStage, setVerifyStage] = useState<VerifyStage>("");
   const [view, setView] = useState<ViewMode>("cards");
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const c = localStorage.getItem(CATEGORY_STORAGE_KEY);
-    if (c === "opportunities" || c === "mispricings") setCategory(c);
-  }, []);
-
-  function changeCategory(next: Category) {
-    setCategory(next);
-    if (typeof window !== "undefined") localStorage.setItem(CATEGORY_STORAGE_KEY, next);
-    // When switching tabs, retune the divergence threshold to category-appropriate defaults
-    // (since divergence in fineprint context means "rules-vs-vibe gap" 0-10 and in mispricings
-    // context means "confidence" 0-10 — they're scored on similar scales but the meaningful
-    // floors differ).
-    if (next === "mispricings") {
-      setMinDivergence(6);
-      setVerifyStage("");
-    } else {
-      setMinDivergence(6);
-    }
-  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -120,24 +105,6 @@ export default function Home() {
     <AppShell>
       <OnboardingDialog />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Category tabs */}
-        <div className="flex items-center gap-1 mb-5 border-b border-[var(--border)]">
-          <CategoryTab
-            label="Opportunities"
-            sublabel="Fineprint vs. vibe"
-            icon={<FileText className="w-4 h-4" />}
-            active={category === "opportunities"}
-            onClick={() => changeCategory("opportunities")}
-          />
-          <CategoryTab
-            label="Mispricings"
-            sublabel="World state vs. price"
-            icon={<Globe className="w-4 h-4" />}
-            active={category === "mispricings"}
-            onClick={() => changeCategory("mispricings")}
-          />
-        </div>
-
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
             {COPY[category].title}
@@ -277,24 +244,6 @@ export default function Home() {
   );
 }
 
-function CategoryTab({ label, sublabel, icon, active, onClick }: { label: string; sublabel: string; icon: React.ReactNode; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`group relative inline-flex items-center gap-2 px-4 sm:px-5 py-3 -mb-px border-b-2 transition-colors ${
-        active
-          ? "border-[var(--accent)] text-[var(--text)]"
-          : "border-transparent text-[var(--text-muted)] hover:text-[var(--text)]"
-      }`}
-    >
-      <span className={active ? "text-[var(--accent)]" : ""}>{icon}</span>
-      <span className="flex flex-col items-start leading-tight">
-        <span className="text-sm font-medium">{label}</span>
-        <span className="text-[10px] tracking-wider uppercase text-[var(--text-dim)]">{sublabel}</span>
-      </span>
-    </button>
-  );
-}
 
 function Filter({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   const isDefault = options[0]?.value === value;

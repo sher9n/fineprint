@@ -94,7 +94,7 @@ function inferResolution(market: Market): string {
 // findSimilarClosedMarkets in src/lib/embeddings.ts. Markets are now matched by pgvector
 // cosine distance on text-embedding-3-small embeddings rather than lexical keyword overlap.)
 
-async function buildVerifierUserMessage(market: Market): Promise<string> {
+export async function buildVerifierUserMessage(market: Market): Promise<string> {
   const context = await buildMarketContext(market);
   const contextBlock = context
     ? `\nMARKET CONTEXT (related Polymarket data — use this to steelman the current market price):\n${context}\n`
@@ -123,6 +123,11 @@ export async function submitHaikuBatch(markets: Market[], opts: { purpose?: stri
   let model = opts.model;
   if (!model) {
     const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    // Guard against silent Haiku fallback when the operator has selected an OpenAI first-pass.
+    // Anthropic batch can only run Anthropic models; scheduler should route to in-line for gpt5_4.
+    if (settings?.firstPassModel === "gpt5_4") {
+      throw new Error("submitHaikuBatch called with firstPassModel='gpt5_4'; use in-line runFirstPassAnalysis instead");
+    }
     model = resolveFirstPassModel(settings?.firstPassModel);
   }
 
@@ -151,7 +156,11 @@ export async function submitHaikuBatch(markets: Market[], opts: { purpose?: stri
   return batch.id;
 }
 
-const VERIFIER_COST_ESTIMATE_PER_MARKET = 0.30;
+// Per-market budget-gate estimate for Opus verifier with web_search. Calibrated against
+// real Anthropic Console billing (2026-05-29): scenario-A pass of 2000 markets billed $26.81
+// = ~$0.013/call. Conservative gate at 2.3x real, so worst-case anomaly trips the gate while
+// normal runs pass. Refresh if real cost shifts persistently.
+const VERIFIER_COST_ESTIMATE_PER_MARKET = 0.03;
 
 export async function submitVerifierBatch(markets: Market[], opts: { purpose?: string } = {}): Promise<string> {
   if (!llmCallsEnabled()) throw new LLMDisabledError();
@@ -410,6 +419,50 @@ export async function pickMarketsForBatch(limit = 2000, opts: { force?: boolean;
   })).filter((m) => !inflightIds.has(m.id));
 
   return needed.slice(0, limit);
+}
+
+/**
+ * Pick markets for the Opus + web_search "first-pass" (Scenario A). Unlike pickMarketsForBatch
+ * (Sonnet-style triage) and pickMarketsForVerifierBatch (escalation-based), this picks ALL
+ * eligible markets ranked by prefilter score + liquidity. We rely on the prefilter and liquidity
+ * floor to bound volume — there's no separate first-pass to gate against.
+ *
+ * Recency check looks for any Opus analysis matching the current rulesHash within 24h.
+ */
+export async function pickMarketsForOpusFirstPass(limit = 2000): Promise<Market[]> {
+  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+  const minLiq = settings?.minLiquidityUsd ?? 10000;
+  const inflightIds = await inflightMarketIds(new Set([VERIFIER_PURPOSE]));
+
+  const { prefilter } = await import("./prefilter");
+
+  const markets = await prisma.market.findMany({
+    where: {
+      active: true,
+      closed: false,
+      liquidity: { gte: minLiq },
+      OR: [{ endDate: null }, { endDate: { gt: new Date() } }],
+      AND: PRICE_LIVE_FILTER,
+    },
+    include: { analyses: { where: { pass: "opus" }, orderBy: { createdAt: "desc" }, take: 1 } },
+    orderBy: { liquidity: "desc" },
+    take: 10000,
+  });
+
+  const ranked = markets
+    .filter((m) => !inflightIds.has(m.id))
+    .filter((m) => {
+      const last = m.analyses[0];
+      if (!last) return true;
+      if (last.rulesHash !== m.rulesHash) return true;
+      const ageH = (Date.now() - last.createdAt.getTime()) / (1000 * 60 * 60);
+      return ageH > 24;
+    })
+    .map((m) => ({ market: m, pre: prefilter(m) }))
+    .filter((x) => x.pre.pass)
+    .sort((a, b) => b.pre.score - a.pre.score || b.market.liquidity - a.market.liquidity);
+
+  return ranked.slice(0, limit).map((x) => x.market);
 }
 
 export async function pickMarketsForVerifierBatch(limit = 100, opts: { force?: boolean } = {}): Promise<Market[]> {

@@ -42,3 +42,7 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# local-only diagnostic outputs
+/dev.log
+/eval-output/

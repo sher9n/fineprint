@@ -30,8 +30,8 @@ export async function PATCH(req: NextRequest) {
   if ("autoTradeEnabled" in body) data.autoTradeEnabled = body.autoTradeEnabled === true;
   if ("batchModeEnabled" in body) data.batchModeEnabled = body.batchModeEnabled === true;
   if ("firstPassModel" in body) {
-    if (body.firstPassModel !== "haiku" && body.firstPassModel !== "sonnet") {
-      return NextResponse.json({ error: "firstPassModel must be 'haiku' or 'sonnet'" }, { status: 400 });
+    if (body.firstPassModel !== "haiku" && body.firstPassModel !== "sonnet" && body.firstPassModel !== "gpt5_4") {
+      return NextResponse.json({ error: "firstPassModel must be 'haiku', 'sonnet', or 'gpt5_4'" }, { status: 400 });
     }
     data.firstPassModel = body.firstPassModel;
   }

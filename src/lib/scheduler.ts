@@ -28,13 +28,11 @@ async function fireDailyRun() {
   dailyRunning = true;
   try {
     const { runIngest } = await import("@/lib/ingest");
-    const { runAnalysisPass } = await import("@/lib/analyzer");
-    const { submitHaikuBatch, pickMarketsForBatch } = await import("@/lib/batch");
+    const { submitVerifierBatch, pickMarketsForOpusFirstPass } = await import("@/lib/batch");
     const { ensureSettings } = await import("@/lib/bootstrap");
     const { embedPendingMarkets } = await import("@/lib/embeddings");
     const { prisma } = await import("@/lib/prisma");
     await ensureSettings();
-    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
     const run = await prisma.ingestRun.create({ data: { kind: "scheduled", status: "running" } });
     try {
       const ing = await runIngest();
@@ -47,37 +45,29 @@ async function fireDailyRun() {
       } catch (e) {
         console.error(`[scheduler] embedPendingMarkets failed:`, String(e).slice(0, 200));
       }
-      if (settings?.batchModeEnabled) {
-        const markets = await pickMarketsForBatch(2000);
-        if (markets.length > 0) {
-          const batchId = await submitHaikuBatch(markets);
-          console.log(`[scheduler] submitted batch ${batchId} with ${markets.length} markets`);
-        }
-        await prisma.ingestRun.update({
-          where: { id: run.id },
-          data: {
-            finishedAt: new Date(),
-            status: "success",
-            marketsAdded: ing.added,
-            marketsUpdated: ing.updated,
-          },
-        });
+      // Scenario A: Opus 4.7 + web_search + sibling context on every eligible market. Single
+      // batch per day, no separate first-pass / escalation. Calibrated 2026-05-29: ~$27/day
+      // at 2000 markets, ~10x more candidate flags than Sonnet→escalation triage at similar
+      // total spend. See conversation 2026-05-29 for cost analysis.
+      const markets = await pickMarketsForOpusFirstPass(2000);
+      let batchId: string | null = null;
+      if (markets.length > 0) {
+        batchId = await submitVerifierBatch(markets);
+        console.log(`[scheduler] Opus+ws batch ${batchId} submitted (${markets.length} markets)`);
       } else {
-        const ana = await runAnalysisPass({ maxMarkets: 2000 });
-        await prisma.ingestRun.update({
-          where: { id: run.id },
-          data: {
-            finishedAt: new Date(),
-            status: "success",
-            marketsAdded: ing.added,
-            marketsUpdated: ing.updated,
-            marketsAnalyzed: ana.haikuRun,
-            haikuCalls: ana.haikuRun,
-            opusCalls: ana.verifierSubmitted,
-          },
-        });
-        if (ana.verifierBatchId) console.log(`[scheduler] verifier batch submitted: ${ana.verifierBatchId} (${ana.verifierSubmitted} markets)`);
+        console.log(`[scheduler] no markets to analyze; skipping batch submission`);
       }
+      await prisma.ingestRun.update({
+        where: { id: run.id },
+        data: {
+          finishedAt: new Date(),
+          status: "success",
+          marketsAdded: ing.added,
+          marketsUpdated: ing.updated,
+          marketsAnalyzed: markets.length,
+          opusCalls: markets.length,
+        },
+      });
       console.log("[scheduler] daily run done");
     } catch (e) {
       await prisma.ingestRun.update({

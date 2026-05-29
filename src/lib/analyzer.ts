@@ -483,8 +483,17 @@ Format: source_findings paragraph first, then JSON object. Use a clear separator
   return { analysis: parsed, sourceFindings, usage, costUsd: cost, webSearches };
 }
 
+export async function runFirstPassAnalysis(market: Market) {
+  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+  if (settings?.firstPassModel === "gpt5_4") {
+    const { runOpenAIFirstPass } = await import("./analyzer-openai");
+    return runOpenAIFirstPass(market);
+  }
+  return runHaikuAnalysis(market);
+}
+
 export async function analyzeAndStore(market: Market, pass: "haiku" | "opus") {
-  const result = pass === "haiku" ? await runHaikuAnalysis(market) : await runOpusAnalysis(market);
+  const result = pass === "haiku" ? await runFirstPassAnalysis(market) : await runOpusAnalysis(market);
   if (!result) return null;
 
   const scored = computeEdge({

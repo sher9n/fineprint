@@ -16,10 +16,13 @@ export const PRICING: Record<string, ModelPricing> = {
     cacheWritePerMillion: 1.25,
   },
   "claude-opus-4-7": {
-    inputPerMillion: 15.0,
-    outputPerMillion: 75.0,
-    cacheReadPerMillion: 1.5,
-    cacheWritePerMillion: 18.75,
+    // Verified from platform.claude.com/docs/en/about-claude/pricing 2026-05-29.
+    // Anthropic dropped Opus pricing 3x at the 4.5+ generation; previous numbers ($15/$75)
+    // were Opus 4.1 rates and produced ~3x cost over-reporting on Opus rows in CostLog.
+    inputPerMillion: 5.0,
+    outputPerMillion: 25.0,
+    cacheReadPerMillion: 0.5,
+    cacheWritePerMillion: 6.25,
   },
   "claude-sonnet-4-6": {
     inputPerMillion: 3.0,
@@ -32,6 +35,15 @@ export const PRICING: Record<string, ModelPricing> = {
     inputPerMillion: 10.0,
     outputPerMillion: 40.0,
     cacheReadPerMillion: 0,
+    cacheWritePerMillion: 0,
+  },
+  // OpenAI gpt-5.4 standard tier pricing. Flex tier = same numbers with discountFactor=0.5
+  // passed to logCost (mirrors the Anthropic batch pattern). Longest-prefix lookup handles
+  // dated snapshots like gpt-5.4-2026-03-05.
+  "gpt-5.4": {
+    inputPerMillion: 2.5,
+    outputPerMillion: 15.0,
+    cacheReadPerMillion: 0.25,
     cacheWritePerMillion: 0,
   },
 };
@@ -61,14 +73,32 @@ export function computeCost(
     console.warn(`[budget] no pricing entry for model '${model}' — cost recorded as 0`);
     return 0;
   }
+  // Cache accounting heuristic: when cache_read > 0, treat cache_creation as informational
+  // (Anthropic populates both fields per-request in batch responses, but only bills cache
+  // creation once per cache, not per-request). When cache_read = 0, this is a true first
+  // write (in-line first call within a cache window), and cache_creation is billable.
+  //
+  // Verified against an isolated Sonnet call 2026-05-29 (request msg_017dqT1hgcDBvZqXHW5TKTh2):
+  // cache_creation=7635, cache_read=0, so cache_creation IS the actual billable write.
+  // For batched responses where both are populated, cache_creation is suppressed here to
+  // avoid the ~3x over-reporting we saw against Anthropic Console totals.
   const inputCost = (usage.inputTokens * p.inputPerMillion) / 1_000_000;
   const outputCost = (usage.outputTokens * p.outputPerMillion) / 1_000_000;
-  const cacheReadCost = ((usage.cacheReadTokens ?? 0) * p.cacheReadPerMillion) / 1_000_000;
-  const cacheWriteCost = ((usage.cacheCreationTokens ?? 0) * p.cacheWritePerMillion) / 1_000_000;
+  const cacheReadTokens = usage.cacheReadTokens ?? 0;
+  const cacheReadCost = (cacheReadTokens * p.cacheReadPerMillion) / 1_000_000;
+  const cacheCreationTokens = usage.cacheCreationTokens ?? 0;
+  const cacheWriteCost =
+    cacheReadTokens > 0
+      ? 0
+      : (cacheCreationTokens * p.cacheWritePerMillion) / 1_000_000;
   return inputCost + outputCost + cacheReadCost + cacheWriteCost;
 }
 
-export const WEB_SEARCH_COST_PER_CALL = 0.01;
+// Anthropic web_search tool. The listed price is $10/1000 calls, but observed billing on the
+// Anthropic Console is ~$0.0002/call effective (most tool_use blocks don't translate to billed
+// queries, or volume tier kicks in). Kept here as a small constant for budgeting; not a major
+// contributor to total spend at our volumes.
+export const WEB_SEARCH_COST_PER_CALL = 0.0003;
 
 export async function spentTodayUsd(): Promise<number> {
   const date = todayIstDateString();

@@ -262,9 +262,15 @@ export default function MarketDetailPage() {
   const opusAnalysis = findCurrent("opus");
   const gptAnalysis = findCurrent("gpt_deep");
   const synthesisAnalysis = findCurrent("synthesis");
-  // The primary analysis drives the headline recommendation, in priority order:
-  // synthesis (final) > opus (verified) > gpt_deep (research only) > latest haiku/sonnet.
-  const a = synthesisAnalysis ?? opusAnalysis ?? gptAnalysis ?? m.analyses[0];
+  // The headline recommendation uses the FRESHEST current-rules analysis. We used to always
+  // prefer synthesis, but that created a stale-verdict bug: when a re-verification fired
+  // after a synthesis ran (e.g. the next daily Opus pass), the detail page kept showing
+  // the old synthesis NONE while the homepage card already showed the new Opus opportunity.
+  // Synthesis still wins in the common case because it's logged right after the gpt_deep
+  // call it consumes, so it IS the most recent. When a newer Opus exists, it reflects newer
+  // information and should drive the display.
+  const currentAnalyses = m.analyses.filter((x) => x.rulesHash === m.rulesHash);
+  const a = currentAnalyses[0] ?? m.analyses[0];
   // Compare implied bet direction (betSide / rule_p-vs-price), NOT raw edge_direction. The
   // schema's edge_direction answers "does the LITERAL reading favor a side over the VIBE reading"
   // — a divergence-direction. A fact-finder that sees no rules-vs-vibe gap but estimates P(YES)

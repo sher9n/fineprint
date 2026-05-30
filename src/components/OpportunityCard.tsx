@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   describeBet,
@@ -11,7 +11,7 @@ import {
 } from "@/lib/explain";
 import { TrustBadge } from "./TrustBadge";
 import { MismatchStat, ScoreStat } from "./PickStats";
-import { BookmarkButton } from "./BookmarkButton";
+import { fmtIstShort } from "@/lib/time";
 
 interface CardProps {
   id: string;
@@ -25,7 +25,6 @@ interface CardProps {
   endDate: string | null;
   verifyStage?: string;
   foundAt?: string | null;
-  bookmarked?: boolean;
   analysis: {
     id: string;
     pass: string;
@@ -83,10 +82,18 @@ export function OpportunityCard(p: CardProps) {
         </h3>
 
         {/* Meta */}
-        <div className="text-[13px] text-[var(--text-muted)] -mt-1">
-          {resolutionTimeline(p.endDate, p.groupItemTitle)}
-          <span className="mx-2 text-[var(--text-dim)]">&middot;</span>
-          <span className="mono">{moneyK}</span> in play
+        <div className="-mt-1 space-y-1.5">
+          <div className="text-[13px] text-[var(--text-muted)]">
+            {resolutionTimeline(p.endDate, p.groupItemTitle)}
+            <span className="mx-2 text-[var(--text-dim)]">&middot;</span>
+            <span className="mono">{moneyK}</span> in play
+          </div>
+          {p.foundAt && (
+            <div className="flex items-center gap-1.5 text-[12px] text-[var(--text-dim)]">
+              <Clock className="w-3 h-3 shrink-0" />
+              <span>Found {fmtIstShort(p.foundAt)}</span>
+            </div>
+          )}
         </div>
 
         {/* Recommendation */}
@@ -122,19 +129,16 @@ export function OpportunityCard(p: CardProps) {
         </div>
       </div>
 
-      {/* Footer: strength + save + open */}
+      {/* Footer: strength + open */}
       <div className="px-5 sm:px-6 py-3 border-t border-[var(--border)] flex items-center justify-between gap-x-3 gap-y-2.5 flex-wrap">
         <div className="relative z-10 flex items-center gap-2">
           <MismatchStat score={a.divergenceScore} isMispricing={a.pass === "obvious"} vibe={a.vibeInterpretation} literal={a.literalInterpretation} />
           <ScoreStat edgeScore={a.edgeScore} divergenceScore={a.divergenceScore} priceGap={a.priceGap} liquidity={p.liquidity} endDate={p.endDate} pass={a.pass} directionAgreement={a.directionAgreement} />
         </div>
-        <div className="flex items-center gap-2.5 ml-auto shrink-0">
-          <span className="relative z-10"><BookmarkButton marketId={p.id} initial={!!p.bookmarked} size="md" /></span>
-          <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--accent)]">
-            <span className="xl:hidden">See why</span>
-            <ArrowRight className="w-4 h-4" />
-          </span>
-        </div>
+        <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--accent)] ml-auto shrink-0">
+          <span className="xl:hidden">See why</span>
+          <ArrowRight className="w-4 h-4" />
+        </span>
       </div>
     </article>
   );

@@ -60,7 +60,7 @@ export default function BookmarksPage() {
           <>
             <div className="text-[14px] text-[var(--text-muted)] mb-5">{markets.length} saved</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 stagger">
-              {markets.map((m) => <OpportunityCard key={m.id} {...m} bookmarked={true} />)}
+              {markets.map((m) => <OpportunityCard key={m.id} {...m} />)}
             </div>
           </>
         )}

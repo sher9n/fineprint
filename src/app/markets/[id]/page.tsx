@@ -22,7 +22,7 @@ import {
   describeBet, impliedBetSide, resolutionTimeline, hasThreeWayStructure, solveThreeWay,
   pickKind, upsidePercent, trustLabel,
 } from "@/lib/explain";
-import { fmtIst } from "@/lib/time";
+import { fmtIst, fmtIstShort } from "@/lib/time";
 import { marketDisplayUrl } from "@/lib/polymarket";
 
 interface AnalysisDetail {
@@ -227,6 +227,12 @@ export default function MarketDetailPage() {
   const synthesisAnalysis = findCurrent("synthesis");
   const currentAnalyses = m.analyses.filter((x) => x.rulesHash === m.rulesHash);
   const a = currentAnalyses[0] ?? m.analyses[0];
+  // When this opportunity was discovered: earliest escalated/verified pass (mirrors the feed's foundAt).
+  const discoveredAt = m.analyses.reduce<string | null>(
+    (min, x) =>
+      ["opus", "gpt_deep", "synthesis", "obvious"].includes(x.pass) && (!min || x.createdAt < min) ? x.createdAt : min,
+    null,
+  );
 
   const opusSide = opusAnalysis ? impliedBetSide(opusAnalysis, opusAnalysis.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
   const gptSide = gptAnalysis ? impliedBetSide(gptAnalysis, gptAnalysis.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
@@ -301,6 +307,12 @@ export default function MarketDetailPage() {
             <span>{resolutionTimeline(m.endDate, m.groupItemTitle)}</span>
             <span className="text-[var(--text-dim)]">&middot;</span>
             <span><span className="mono">${(m.liquidity / 1000).toFixed(0)}k</span> in play</span>
+            {discoveredAt && (
+              <>
+                <span className="text-[var(--text-dim)]">&middot;</span>
+                <span>Found {fmtIstShort(discoveredAt)}</span>
+              </>
+            )}
             <span className="text-[var(--text-dim)]">&middot;</span>
             <a href={polymarketUrl} target="_blank" rel="noreferrer" className="text-[var(--accent)] hover:underline inline-flex items-center gap-1">
               View on Polymarket <ExternalLink className="w-3.5 h-3.5" />

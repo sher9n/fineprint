@@ -488,8 +488,8 @@ export default function MarketDetailPage() {
         {opusAnalysis && gptAnalysis && (
           <Section title="The two independent reviews" subtitle="Each reviewed this on its own. The recommendation above is our reconciliation of the two.">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ModelEvidencePanel label="Market-aware review" analysis={opusAnalysis} accent="green" />
-              <ModelEvidencePanel label="Independent fact-check" analysis={gptAnalysis} accent="purple" />
+              <ModelEvidencePanel label="Market-aware review" analysis={opusAnalysis} accent="green" side={opusSide} />
+              <ModelEvidencePanel label="Independent fact-check" analysis={gptAnalysis} accent="purple" side={gptSide} />
             </div>
           </Section>
         )}
@@ -617,11 +617,14 @@ function LivePriceBadge({ liveData, isFetching, onRefresh }: {
   );
 }
 
-function ModelEvidencePanel({ label, analysis, accent }: { label: string; analysis: AnalysisDetail; accent: "green" | "purple" }) {
+function ModelEvidencePanel({ label, analysis, accent, side }: { label: string; analysis: AnalysisDetail; accent: "green" | "purple"; side: "YES" | "NO" | "NONE" }) {
+  // Use the implied bet side (betSide / rule_p-vs-price), NOT the raw edge_direction, so this
+  // matches the agreement banner. A fact-finder can report edge_direction=NONE (no rules-vs-vibe
+  // gap) while still implying a YES bet because it thinks YES is underpriced. See impliedBetSide.
   const steps: string[] = analysis.verificationSteps ? JSON.parse(analysis.verificationSteps) : [];
   const dotColor = accent === "green" ? "bg-[var(--green)]" : "bg-[var(--purple)]";
-  const dir = analysis.edgeDirection === "YES" ? "Leans YES" : analysis.edgeDirection === "NO" ? "Leans NO" : "No edge";
-  const dirColor = analysis.edgeDirection === "YES" ? "text-[var(--green)]" : analysis.edgeDirection === "NO" ? "text-[var(--red)]" : "text-[var(--text-muted)]";
+  const dir = side === "YES" ? "Leans YES" : side === "NO" ? "Leans NO" : "No edge";
+  const dirColor = side === "YES" ? "text-[var(--green)]" : side === "NO" ? "text-[var(--red)]" : "text-[var(--text-muted)]";
   return (
     <div className="card card-pad space-y-3 min-w-0 overflow-hidden">
       <div className="flex items-start justify-between gap-2">

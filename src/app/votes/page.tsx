@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ThumbsUp, ThumbsDown } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { cn } from "@/lib/utils";
+import { fmtIstShort } from "@/lib/time";
 
 export default function VotesPage() {
   const { data: session } = useSession();
@@ -54,7 +55,7 @@ export default function VotesPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-[15px] font-medium line-clamp-1 text-[var(--text)]">{v.eventTitle && v.groupItemTitle ? `${v.eventTitle}: ${v.groupItemTitle}` : v.question}</div>
-                  <div className="text-[13px] text-[var(--text-dim)] mt-0.5">{v.direction > 0 ? "Useful" : "Not useful"} &middot; {new Date(v.createdAt).toLocaleDateString()}</div>
+                  <div className="text-[13px] text-[var(--text-dim)] mt-0.5">{v.direction > 0 ? "Useful" : "Not useful"} &middot; {fmtIstShort(v.createdAt)}</div>
                 </div>
               </Link>
             ))}

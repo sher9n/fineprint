@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * List of markets bookmarked by the signed-in user. Returns the same shape as
- * /api/markets so the existing OpportunityCard / OpportunityRow can render the rows
+ * /api/markets so the existing OpportunityCard can render the rows
  * directly. Includes BOTH the freshest fineprint analysis AND the obvious analysis
  * when available so the user can see whichever signal exists. Headline analysis
  * (the `analysis` field) is whichever was created most recently.

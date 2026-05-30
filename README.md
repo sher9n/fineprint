@@ -9,9 +9,9 @@ For each Polymarket market we ingest, the system can run up to four analyses:
 | Pass | Model | Trigger | Purpose |
 |---|---|---|---|
 | `haiku` / `sonnet` (first-pass) | Claude Haiku 4.5 or Sonnet 4.6 | Daily batch | Cheap first read on every market. Scores rule vs vibe divergence 0-10. |
-| `opus` (verifier) | Claude Opus 4.7 + web search | Auto when first-pass divergence ≥ 5 and edge ≥ 20 | Web-searches named sources, verifies facts, refines the verdict. |
+| `opus` (verifier) | Claude Opus 4.8 + web search | Auto when first-pass divergence ≥ 5 and edge ≥ 20 | Web-searches named sources, verifies facts, refines the verdict. |
 | `gpt_deep` (third opinion) | OpenAI o3-deep-research | Manual admin trigger per market | Independent deep-research read with its own browsing and reasoning. |
-| `synthesis` | Claude Opus 4.7 | Auto after `gpt_deep` completes | Reads both Opus + GPT, produces a final verdict, flags agreement/disagreement. |
+| `synthesis` | Claude Opus 4.8 | Auto after `gpt_deep` completes | Reads both Opus + GPT, produces a final verdict, flags agreement/disagreement. |
 
 The first two passes are automated. Deep research is **strictly manual, one market at a time** (it's expensive: $1-2 per call).
 

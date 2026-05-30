@@ -24,6 +24,14 @@ export const PRICING: Record<string, ModelPricing> = {
     cacheReadPerMillion: 0.5,
     cacheWritePerMillion: 6.25,
   },
+  "claude-opus-4-8": {
+    // Same price tier as Opus 4.5/4.6/4.7. Verified from platform.claude.com pricing 2026-05-30.
+    // Longest-prefix lookup also covers dated snapshots like claude-opus-4-8-YYYYMMDD.
+    inputPerMillion: 5.0,
+    outputPerMillion: 25.0,
+    cacheReadPerMillion: 0.5,
+    cacheWritePerMillion: 6.25,
+  },
   "claude-sonnet-4-6": {
     inputPerMillion: 3.0,
     outputPerMillion: 15.0,

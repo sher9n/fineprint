@@ -5,8 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useState, type ReactNode, type ComponentType } from "react";
 import {
-  Home, Bookmark, Receipt, Heart, Settings, LogOut, LogIn, X, Wrench,
-  History, Gauge, SlidersHorizontal, ChevronDown, User as UserIcon, HelpCircle, Info,
+  Home, Bookmark, Heart, Settings, LogOut, LogIn, X, Wrench,
+  History, SlidersHorizontal, ChevronDown, User as UserIcon, HelpCircle, Info,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { ThemeToggle } from "./ThemeToggle";
@@ -58,7 +58,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </div>
                 <MenuSeparator />
                 <MenuLink href="/bookmarks" icon={<Bookmark className="w-4 h-4" />}>Saved</MenuLink>
-                <MenuLink href="/bets" icon={<Receipt className="w-4 h-4" />}>My bets</MenuLink>
                 <MenuLink href="/votes" icon={<Heart className="w-4 h-4" />}>My votes</MenuLink>
                 <MenuLink href="/settings" icon={<Settings className="w-4 h-4" />}>Settings</MenuLink>
                 <MenuSeparator />
@@ -73,7 +72,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <MenuSeparator />
                     <MenuLink href="/admin" icon={<Wrench className="w-4 h-4" />}>Admin overview</MenuLink>
                     <MenuLink href="/admin/runs" icon={<History className="w-4 h-4" />}>Runs</MenuLink>
-                    <MenuLink href="/admin/calibration" icon={<Gauge className="w-4 h-4" />}>Win rate</MenuLink>
                     <MenuLink href="/admin/pipeline" icon={<SlidersHorizontal className="w-4 h-4" />}>Pipeline</MenuLink>
                   </>
                 )}
@@ -113,7 +111,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           {session ? (
             <>
               <TabItem href="/bookmarks" label="Saved" icon={Bookmark} active={path.startsWith("/bookmarks")} />
-              <TabItem href="/bets" label="My bets" icon={Receipt} active={path.startsWith("/bets")} />
               <TabButton label="Account" icon={UserIcon} active={sheetOpen} onClick={() => setSheetOpen(true)} />
             </>
           ) : (
@@ -149,7 +146,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <div className="pt-3 pb-1 px-3 text-[11px] uppercase tracking-wider text-[var(--text-dim)]">Admin</div>
                   <SheetLink href="/admin" label="Admin overview" icon={Wrench} onClose={closeSheet} />
                   <SheetLink href="/admin/runs" label="Runs" icon={History} onClose={closeSheet} />
-                  <SheetLink href="/admin/calibration" label="Win rate" icon={Gauge} onClose={closeSheet} />
                   <SheetLink href="/admin/pipeline" label="Pipeline" icon={SlidersHorizontal} onClose={closeSheet} />
                 </>
               )}

@@ -5,7 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { Database, Sparkles, Layers, RefreshCw, History, Wrench, Gauge, Play } from "lucide-react";
+import { Database, Sparkles, Layers, RefreshCw, History, Wrench, Play } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { cn, fmtUsd } from "@/lib/utils";
 
@@ -130,13 +130,6 @@ export default function AdminHome() {
               <div>
                 <div className="font-medium">Runs history</div>
                 <div className="text-xs text-[var(--text-muted)] mt-0.5">Every ingest, analyze, and batch job with status + cost</div>
-              </div>
-            </Link>
-            <Link href="/admin/calibration" className="card p-5 hover:border-[var(--border-strong)] flex items-start gap-3 transition-colors">
-              <Gauge className="w-5 h-5 text-[var(--text-muted)] shrink-0" />
-              <div>
-                <div className="font-medium">Win rate</div>
-                <div className="text-xs text-[var(--text-muted)] mt-0.5">Bet results, hit rate, calibration by mismatch level</div>
               </div>
             </Link>
             <Link href="/admin/pipeline" className="card p-5 hover:border-[var(--border-strong)] flex items-start gap-3 transition-colors">

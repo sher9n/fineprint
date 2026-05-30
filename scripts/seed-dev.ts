@@ -64,7 +64,7 @@ const MARKETS: M[] = [
     noPrice: 0.58,
     analyses: [
       {
-        pass: "opus", model: "claude-opus-4-7", divergenceType: "date_bound", divergenceScore: 8,
+        pass: "opus", model: "claude-opus-4-8", divergenceType: "date_bound", divergenceScore: 8,
         edgeDirection: "YES", betSide: "YES", edgeScore: 70, ruleImpliedProbability: 0.86,
         expectedYesPayoutCents: 86, expectedNoPayoutCents: 14, yesPriceAtAnalysis: 0.42, noPriceAtAnalysis: 0.58,
         vibe: "People read this as a general bet on whether the Fed is in a rate-cutting mood this spring.",
@@ -86,7 +86,7 @@ const MARKETS: M[] = [
         ageMins: 60,
       },
       {
-        pass: "synthesis", model: "claude-opus-4-7", divergenceType: "date_bound", divergenceScore: 8,
+        pass: "synthesis", model: "claude-opus-4-8", divergenceType: "date_bound", divergenceScore: 8,
         edgeDirection: "YES", betSide: "YES", edgeScore: 72, ruleImpliedProbability: 0.88,
         expectedYesPayoutCents: 88, expectedNoPayoutCents: 12, yesPriceAtAnalysis: 0.42, noPriceAtAnalysis: 0.58,
         vibe: "Most bettors treat this as a loose question about Fed easing this spring.",
@@ -118,7 +118,7 @@ const MARKETS: M[] = [
         ageMins: 240,
       },
       {
-        pass: "opus", model: "claude-opus-4-7", divergenceType: "specific_event", divergenceScore: 7,
+        pass: "opus", model: "claude-opus-4-8", divergenceType: "specific_event", divergenceScore: 7,
         edgeDirection: "NO", betSide: "NO", edgeScore: 65, ruleImpliedProbability: 0.18,
         expectedYesPayoutCents: 18, expectedNoPayoutCents: 90, yesPriceAtAnalysis: 0.62, noPriceAtAnalysis: 0.38,
         vibe: "The price treats the current polling front-runner as the likely mayor.",
@@ -145,7 +145,7 @@ const MARKETS: M[] = [
     groupItemTitle: "June 30",
     analyses: [
       {
-        pass: "opus", model: "claude-opus-4-7", divergenceType: "date_bound", divergenceScore: 6,
+        pass: "opus", model: "claude-opus-4-8", divergenceType: "date_bound", divergenceScore: 6,
         edgeDirection: "YES", betSide: "YES", edgeScore: 40, ruleImpliedProbability: 0.5,
         expectedYesPayoutCents: 65, expectedNoPayoutCents: 30, yesPriceAtAnalysis: 0.5, noPriceAtAnalysis: 0.5,
         vibe: "People see a coin-flip on peace by summer.",
@@ -170,7 +170,7 @@ const MARKETS: M[] = [
     noPrice: 0.7,
     analyses: [
       {
-        pass: "opus", model: "claude-opus-4-7", divergenceType: "threshold", divergenceScore: 6,
+        pass: "opus", model: "claude-opus-4-8", divergenceType: "threshold", divergenceScore: 6,
         edgeDirection: "YES", betSide: "YES", edgeScore: 45, ruleImpliedProbability: 0.55,
         expectedYesPayoutCents: 60, expectedNoPayoutCents: 40, yesPriceAtAnalysis: 0.3, noPriceAtAnalysis: 0.7,
         vibe: "Recounts almost never flip results, so the crowd is heavily on NO.",
@@ -192,7 +192,7 @@ const MARKETS: M[] = [
         ageMins: 100,
       },
       {
-        pass: "synthesis", model: "claude-opus-4-7", divergenceType: "threshold", divergenceScore: 6,
+        pass: "synthesis", model: "claude-opus-4-8", divergenceType: "threshold", divergenceScore: 6,
         edgeDirection: "YES", betSide: "YES", edgeScore: 33, ruleImpliedProbability: 0.42,
         expectedYesPayoutCents: 52, expectedNoPayoutCents: 48, yesPriceAtAnalysis: 0.3, noPriceAtAnalysis: 0.7,
         vibe: "The crowd sees a near-certain NO; the two reviews see it differently from each other.",
@@ -217,7 +217,7 @@ const MARKETS: M[] = [
     noPrice: 0.45,
     analyses: [
       {
-        pass: "opus", model: "claude-opus-4-7", divergenceType: "definition_gap", divergenceScore: 7,
+        pass: "opus", model: "claude-opus-4-8", divergenceType: "definition_gap", divergenceScore: 7,
         edgeDirection: "NONE", betSide: "NONE", edgeScore: 22, ruleImpliedProbability: 0.54,
         expectedYesPayoutCents: null, expectedNoPayoutCents: null, yesPriceAtAnalysis: 0.55, noPriceAtAnalysis: 0.45,
         vibe: "People read 'reach orbit' loosely, counting any successful high-altitude flight.",
@@ -242,7 +242,7 @@ const MARKETS: M[] = [
     noPrice: 0.15,
     analyses: [
       {
-        pass: "opus", model: "claude-opus-4-7", divergenceType: "threshold", divergenceScore: 6,
+        pass: "opus", model: "claude-opus-4-8", divergenceType: "threshold", divergenceScore: 6,
         edgeDirection: "YES", betSide: "YES", edgeScore: 18, ruleImpliedProbability: 0.7,
         expectedYesPayoutCents: 70, expectedNoPayoutCents: 30, yesPriceAtAnalysis: 0.55, noPriceAtAnalysis: 0.45,
         vibe: "A momentum bet on Bitcoin making a new high.",
@@ -383,21 +383,7 @@ async function main() {
     });
   }
 
-  // Bets (open, won, lost) for the My bets page
-  const bets = [
-    { id: "seed-bet-1", marketId: "seed-fed-march", side: "YES", priceAtBet: 0.42, sizeUsd: 50, status: "open", pnlUsd: null, rationale: "Rules pin it to the March meeting and guidance points to a cut." },
-    { id: "seed-bet-2", marketId: "seed-nyc-mayor", side: "NO", priceAtBet: 0.38, sizeUsd: 25, status: "won", pnlUsd: 40.8, rationale: "Front-runner never got certified." },
-    { id: "seed-bet-3", marketId: "seed-newsgap-elections", side: "YES", priceAtBet: 0.4, sizeUsd: 30, status: "lost", pnlUsd: -30, rationale: "Court challenge postponed the vote." },
-  ];
-  for (const b of bets) {
-    await p.bet.upsert({
-      where: { id: b.id },
-      update: { side: b.side, priceAtBet: b.priceAtBet, sizeUsd: b.sizeUsd, status: b.status, pnlUsd: b.pnlUsd, rationale: b.rationale },
-      create: { id: b.id, userId: user.id, marketId: b.marketId, analysisId: `${b.marketId}-opus`, side: b.side, priceAtBet: b.priceAtBet, sizeUsd: b.sizeUsd, status: b.status, pnlUsd: b.pnlUsd, rationale: b.rationale, resolvedAt: b.status === "open" ? null : new Date() },
-    });
-  }
-
-  const counts = { markets: await p.market.count(), analyses: await p.analysis.count(), bookmarks: await p.bookmark.count(), votes: await p.vote.count(), bets: await p.bet.count() };
+  const counts = { markets: await p.market.count(), analyses: await p.analysis.count(), bookmarks: await p.bookmark.count(), votes: await p.vote.count() };
   console.log("Seeded:", JSON.stringify(counts));
   await p.$disconnect();
 }

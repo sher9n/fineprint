@@ -211,7 +211,7 @@ export async function submitVerifierBatch(markets: Market[], opts: { purpose?: s
 }
 
 /**
- * Submit an OBVIOUS-BET batch (world-state mispricing pass). Runs Opus 4.7 + web_search on
+ * Submit an OBVIOUS-BET batch (world-state mispricing pass). Runs Opus 4.8 + web_search on
  * the same kind of input as the verifier but with a different system prompt focused on
  * "is the current world state already determining the outcome?" rather than "do the rules
  * have a gap?" Output schema is different (ObviousBetSchema) and ingestion writes

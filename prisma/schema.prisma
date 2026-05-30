@@ -24,7 +24,6 @@ model User {
   accounts  Account[]
   sessions  Session[]
   votes     Vote[]
-  bets      Bet[]
   bookmarks Bookmark[]
 }
 
@@ -99,7 +98,6 @@ model Market {
   embedding        Unsupported("vector(384)")?
 
   analyses         Analysis[]
-  bets             Bet[]
   deepResearchJobs DeepResearchJob[]
   bookmarks        Bookmark[]
 
@@ -182,26 +180,6 @@ model Vote {
   @@unique([userId, marketId])
   @@index([analysisId])
   @@index([marketId])
-}
-
-model Bet {
-  id         String    @id @default(cuid())
-  userId     String?
-  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  marketId   String
-  market     Market    @relation(fields: [marketId], references: [id], onDelete: Cascade)
-  analysisId String?
-  side       String
-  priceAtBet Float
-  sizeUsd    Float
-  rationale  String?   @db.Text
-  status     String    @default("open")
-  pnlUsd     Float?
-  auto       Boolean   @default(false)
-  placedAt   DateTime  @default(now())
-  resolvedAt DateTime?
-
-  @@index([userId, placedAt])
 }
 
 model Settings {

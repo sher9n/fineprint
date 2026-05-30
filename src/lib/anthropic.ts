@@ -11,7 +11,7 @@ export function anthropic(): Anthropic {
 }
 
 export const HAIKU_MODEL = "claude-haiku-4-5-20251001";
-export const OPUS_MODEL = "claude-opus-4-7";
+export const OPUS_MODEL = "claude-opus-4-8";
 export const SONNET_MODEL = "claude-sonnet-4-6";
 export const VERIFIER_MODEL = process.env.VERIFIER_MODEL || OPUS_MODEL;
 

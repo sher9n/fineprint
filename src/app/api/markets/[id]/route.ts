@@ -11,14 +11,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const userId = session?.user?.id;
 
   // Don't eager-include votes on all 20 analyses just to strip them on output. We only need
-  // votes for the latest analysis. The bookmark + my-bet check can run in parallel with the
-  // market fetch.
+  // votes for the latest analysis. The bookmark check can run in parallel with the market fetch.
   const [market, bookmark] = await Promise.all([
     prisma.market.findUnique({
       where: { id },
       include: {
         analyses: { orderBy: { createdAt: "desc" }, take: 20 },
-        bets: { where: userId ? { userId } : { id: "__none__" }, orderBy: { placedAt: "desc" } },
       },
     }),
     userId ? prisma.bookmark.findUnique({ where: { userId_marketId: { userId, marketId: id } } }) : Promise.resolve(null),

@@ -46,9 +46,9 @@ async function fireDailyRun() {
         console.error(`[scheduler] embedPendingMarkets failed:`, String(e).slice(0, 200));
       }
       // Daily dual-batch pipeline:
-      //   1. VERIFIER (fineprint) — Opus 4.7 + ws + sibling context, asks "do the rules diverge
+      //   1. VERIFIER (fineprint) — Opus 4.8 + ws + sibling context, asks "do the rules diverge
       //      from the lay reading in a way casual bettors miss?"
-      //   2. OBVIOUS (mispricings) — Opus 4.7 + ws, no sibling context, asks "does world state
+      //   2. OBVIOUS (mispricings) — Opus 4.8 + ws, no sibling context, asks "does world state
       //      already determine the outcome in a way the price doesn't reflect?"
       // Both batches run on the SAME 2000-market candidate pool. Combined cost ~$52/day, with
       // separate ingestion (verifier → pass='opus', obvious → pass='obvious') so the UI can

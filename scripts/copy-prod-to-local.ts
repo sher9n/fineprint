@@ -45,7 +45,6 @@ async function main() {
   // 1. Wipe local domain tables (FK-safe order). Auth rows are preserved.
   await dst.vote.deleteMany();
   await dst.bookmark.deleteMany();
-  await dst.bet.deleteMany();
   await dst.deepResearchJob.deleteMany();
   await dst.analysis.deleteMany();
   await dst.market.deleteMany();

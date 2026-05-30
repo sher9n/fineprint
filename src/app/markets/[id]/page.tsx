@@ -86,16 +86,6 @@ interface MarketDetail {
   groupItemTitle: string | null;
   rulesHash: string;
   analyses: AnalysisDetail[];
-  bets: {
-    id: string;
-    side: string;
-    priceAtBet: number;
-    sizeUsd: number;
-    status: string;
-    pnlUsd: number | null;
-    placedAt: string;
-    rationale: string | null;
-  }[];
 }
 
 export default function MarketDetailPage() {
@@ -516,23 +506,6 @@ export default function MarketDetailPage() {
             </button>
           </div>
         </div>
-
-        {/* Your bets */}
-        {m.bets && m.bets.length > 0 && (
-          <Section title="Your bets on this market">
-            <div className="card card-pad space-y-2">
-              {m.bets.map((b) => (
-                <div key={b.id} className="flex items-center justify-between text-[14px] py-2 border-b border-[var(--border)] last:border-0 last:pb-0">
-                  <div className="flex items-center gap-3">
-                    <span className={cn("chip", b.side === "YES" ? "chip-green" : "chip-red")}>{b.side}</span>
-                    <span className="mono">${b.sizeUsd.toFixed(0)} at {(b.priceAtBet * 100).toFixed(0)}c</span>
-                  </div>
-                  <span className={cn("chip", b.status === "won" && "chip-green", b.status === "lost" && "chip-red")}>{b.status}</span>
-                </div>
-              ))}
-            </div>
-          </Section>
-        )}
 
         {/* Details accordion */}
         <div className="card card-pad">

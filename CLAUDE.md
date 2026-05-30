@@ -11,9 +11,9 @@ Polymarket resolution-rule auditor. Surfaces markets where the **literal rules d
 | Pass | Model | Trigger | Cost / call |
 |---|---|---|---|
 | `haiku` / `sonnet` first-pass | Claude Haiku 4.5 or Sonnet 4.6 (configurable) | Daily batch at 05:00 IST | ~$0.005 |
-| `opus` verifier | Claude Opus 4.7 + web search | Auto-escalated when first-pass divergence >= 5 AND edge >= 20 | ~$0.50-1 |
+| `opus` verifier | Claude Opus 4.8 + web search | Auto-escalated when first-pass divergence >= 5 AND edge >= 20 | ~$0.50-1 |
 | `gpt_deep` deep research | OpenAI `o3-deep-research` (env `OPENAI_DEEP_RESEARCH_MODEL`) | **Manual only**, admin button per market | ~$1-2 |
-| `synthesis` | Claude Opus 4.7 | Auto after `gpt_deep` completes | ~$0.35 |
+| `synthesis` | Claude Opus 4.8 | Auto after `gpt_deep` completes | ~$0.35 |
 
 **Deep research is strictly manual** by user policy. Never auto-trigger it across many markets — it's expensive ($1-2 each) and the user wants explicit consent per call.
 

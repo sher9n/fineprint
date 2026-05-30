@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import {
-  ArrowLeft, ExternalLink, ThumbsUp, ThumbsDown, RefreshCw, Sparkles, AlertTriangle, Loader2, AlertCircle, ChevronDown,
+  ArrowLeft, ExternalLink, ThumbsUp, ThumbsDown, RefreshCw, Sparkles, AlertTriangle, Loader2, AlertCircle, ChevronDown, Globe,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { PotentialReturn } from "@/components/PotentialReturn";
@@ -248,7 +248,6 @@ export default function MarketDetailPage() {
   const drInflight = !!drJob && (drJob.status === "queued" || drJob.status === "in_progress");
   const drFailed = !!drJob && (drJob.status === "failed" || drJob.status === "cancelled" || drJob.status === "incomplete");
   const hasCurrentGpt = !!gptAnalysis;
-  const canTriggerDeep = !!session?.user?.isAdmin && !!opusAnalysis && !hasCurrentGpt && !drInflight;
 
   if (!a) {
     return (
@@ -431,20 +430,31 @@ export default function MarketDetailPage() {
             <div><span className="font-medium">Last deep-research attempt failed.</span> <span className="text-[var(--text-muted)]">{drJob!.errorMessage ?? drJob!.status}</span></div>
           </div>
         )}
-        {session?.user?.isAdmin && (!opusAnalysis || canTriggerDeep) && (
-          <div className="rounded-[var(--radius-lg)] bg-[var(--bg-elev-2)] border border-[var(--border)] p-4 flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-[14px] text-[var(--text-muted)] min-w-0">
-              {!opusAnalysis ? "Admin: this is a first-pass read. Review it with web search to confirm." : "Admin: get a second opinion from GPT deep research (about $1 to $2)."}
+        {session?.user?.isAdmin && (
+          <div className="rounded-[var(--radius-lg)] bg-[var(--bg-elev-2)] border border-[var(--border)] p-4">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--text-dim)] mb-3">Admin reviews</div>
+            <div className="flex flex-wrap gap-2.5">
+              <button onClick={() => reanalyze("haiku")} disabled={!!reanalyzing} className="btn btn-sm">
+                {reanalyzing === "haiku"
+                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Re-running...</>
+                  : <><RefreshCw className="w-4 h-4" /> Re-run first pass</>}
+              </button>
+              <button onClick={() => reanalyze("opus")} disabled={!!reanalyzing} className="btn btn-sm">
+                {reanalyzing === "opus"
+                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Reviewing...</>
+                  : <><Globe className="w-4 h-4" /> {opusAnalysis ? "Review with web search again" : "Review with web search"}</>}
+              </button>
+              <button onClick={() => triggerDeepResearch(hasCurrentGpt)} disabled={submittingDeep || drInflight} className="btn btn-sm">
+                {drInflight
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Deep research running...</>
+                  : submittingDeep
+                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Submitting...</>
+                  : <><Sparkles className="w-4 h-4" /> {hasCurrentGpt ? "Review with deep research again" : "Review with deep research"}</>}
+              </button>
             </div>
-            {!opusAnalysis ? (
-              <button onClick={() => reanalyze("opus")} disabled={!!reanalyzing} className="btn btn-primary btn-sm shrink-0">
-                {reanalyzing === "opus" ? <><RefreshCw className="w-4 h-4 animate-spin" /> Reviewing...</> : "Review with web search"}
-              </button>
-            ) : (
-              <button onClick={() => triggerDeepResearch()} disabled={submittingDeep} className="btn btn-sm shrink-0">
-                {submittingDeep ? <><RefreshCw className="w-4 h-4 animate-spin" /> Submitting...</> : <><Sparkles className="w-4 h-4" /> Deep research</>}
-              </button>
-            )}
+            <div className="text-[12px] text-[var(--text-dim)] mt-2.5 leading-relaxed">
+              Web search re-runs the Opus verifier (about 30 to 60 seconds). Deep research runs GPT and takes a few minutes (about $1 to $2).
+            </div>
           </div>
         )}
 
@@ -481,11 +491,6 @@ export default function MarketDetailPage() {
               <ModelEvidencePanel label="Market-aware review" analysis={opusAnalysis} accent="green" />
               <ModelEvidencePanel label="Independent fact-check" analysis={gptAnalysis} accent="purple" />
             </div>
-            {session?.user?.isAdmin && !drInflight && (
-              <button onClick={() => triggerDeepResearch(true)} disabled={submittingDeep} className="btn btn-ghost btn-sm mt-3 text-[var(--purple)]">
-                {submittingDeep ? <><RefreshCw className="w-3 h-3 animate-spin" /> Submitting...</> : <><Sparkles className="w-3 h-3" /> Re-run deep research</>}
-              </button>
-            )}
           </Section>
         )}
 
@@ -544,16 +549,6 @@ export default function MarketDetailPage() {
                 <Detail label="Last checked" value={fmtIst(a.createdAt, "MMM d, HH:mm 'IST'")} />
                 <Detail label="Analysis cost" value={`$${a.costUsd.toFixed(3)}`} />
               </div>
-              {session?.user?.isAdmin && (
-                <div className="flex gap-2 pt-4 border-t border-[var(--border)]">
-                  <button className="btn btn-ghost btn-sm" onClick={() => reanalyze("haiku")} disabled={!!reanalyzing}>
-                    <RefreshCw className={cn("w-3 h-3", reanalyzing === "haiku" && "animate-spin")} /> Re-analyze
-                  </button>
-                  <button className="btn btn-sm" onClick={() => reanalyze("opus")} disabled={!!reanalyzing}>
-                    <RefreshCw className={cn("w-3 h-3", reanalyzing === "opus" && "animate-spin")} /> Review with web search
-                  </button>
-                </div>
-              )}
             </div>
           )}
         </div>

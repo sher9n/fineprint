@@ -593,17 +593,26 @@ function LivePriceBadge({ liveData, isFetching, onRefresh }: {
   const noFraction = liveData?.noAsk ?? liveData?.noPrice ?? null;
   if (!liveData || (yesFraction == null && noFraction == null)) {
     return (
-      <button onClick={onRefresh} disabled={isFetching} className="inline-flex items-center gap-1 text-[11px] text-[var(--text-dim)] hover:text-[var(--text-muted)]">
-        <RefreshCw className={cn("w-3 h-3", isFetching && "animate-spin")} /> {isFetching ? "Checking..." : "Live price"}
+      <button onClick={onRefresh} disabled={isFetching} className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[12px] px-3 py-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-elev)] text-[var(--text-dim)] hover:text-[var(--text-muted)] hover:border-[var(--border-strong)] transition-colors">
+        <RefreshCw className={cn("w-3 h-3", isFetching && "animate-spin")} /> {isFetching ? "Checking price..." : "Check live price"}
       </button>
     );
   }
   const yesCents = yesFraction != null ? (yesFraction * 100).toFixed(0) : "?";
   const noCents = noFraction != null ? (noFraction * 100).toFixed(0) : "?";
   return (
-    <button onClick={onRefresh} disabled={isFetching} title="Live Polymarket price. Click to refresh." className="inline-flex items-center gap-1.5 text-[12px] mono px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--bg-elev)] text-[var(--text-muted)] hover:text-[var(--text)]">
-      <span className="w-1.5 h-1.5 rounded-full bg-[var(--green)] shrink-0 pulse-dot" /> Live {yesCents}c / {noCents}c
-      <RefreshCw className={cn("w-3 h-3 opacity-50", isFetching && "animate-spin opacity-100")} />
+    <button
+      onClick={onRefresh}
+      disabled={isFetching}
+      title={`Live Polymarket price — YES ${yesCents}c, NO ${noCents}c. Click to refresh.`}
+      className="group inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-3 py-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-elev)] hover:border-[var(--border-strong)] transition-colors"
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-[var(--green)] shrink-0 pulse-dot" />
+      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-dim)]">Live</span>
+      <span className="mono text-[12px] leading-none text-[var(--text)]">
+        {yesCents}c<span className="text-[var(--text-dim)] mx-1">/</span>{noCents}c
+      </span>
+      <RefreshCw className={cn("w-3 h-3 text-[var(--text-dim)] transition-colors group-hover:text-[var(--text-muted)]", isFetching && "animate-spin text-[var(--accent)]")} />
     </button>
   );
 }
@@ -615,12 +624,15 @@ function ModelEvidencePanel({ label, analysis, accent }: { label: string; analys
   const dirColor = analysis.edgeDirection === "YES" ? "text-[var(--green)]" : analysis.edgeDirection === "NO" ? "text-[var(--red)]" : "text-[var(--text-muted)]";
   return (
     <div className="card card-pad space-y-3 min-w-0 overflow-hidden">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={cn("w-2 h-2 rounded-full shrink-0", dotColor)} />
-          <h3 className="text-[15px] font-semibold truncate">{label}</h3>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={cn("w-2 h-2 rounded-full shrink-0", dotColor)} />
+            <h3 className="text-[15px] font-semibold truncate">{label}</h3>
+          </div>
+          <div className="text-[11px] text-[var(--text-dim)] mt-1 ml-4">Reviewed {fmtIstShort(analysis.createdAt)}</div>
         </div>
-        <span className={cn("text-[13px] font-bold mono shrink-0", dirColor)}>{dir}</span>
+        <span className={cn("text-[13px] font-bold mono shrink-0 mt-0.5", dirColor)}>{dir}</span>
       </div>
       {analysis.sourceFindings && (
         <div>

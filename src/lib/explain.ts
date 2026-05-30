@@ -182,6 +182,65 @@ export function solveThreeWay(
   return { pYes, pNo: clampedNo, pFallback: clampedFb };
 }
 
+// ---------------------------------------------------------------------------
+// Plain-language layer for the redesigned UI. These translate the internal
+// scores and pipeline stages into words a non-technical person can act on.
+// ---------------------------------------------------------------------------
+
+export type StrengthLevel = 0 | 1 | 2 | 3;
+
+/**
+ * Turn the 0-10 divergence/confidence score into a friendly strength label plus a
+ * 0-3 level used to fill a small meter. No raw "/10" is ever shown to the user.
+ */
+export function strengthLabel(score: number): { label: string; level: StrengthLevel } {
+  if (score >= 8) return { label: "Very strong", level: 3 };
+  if (score >= 6) return { label: "Strong", level: 2 };
+  if (score >= 4) return { label: "Worth a look", level: 1 };
+  return { label: "Early signal", level: 0 };
+}
+
+export type TrustTone = "green" | "amber" | "muted";
+
+/**
+ * Translate the verification stage into a trust label a normal person understands:
+ * one AI = "Checked", two AIs that agree = "Double-checked", two that disagree =
+ * "Mixed views", nothing yet = "Quick scan".
+ */
+export function trustLabel(verifyStage: string | undefined | null): { label: string; tone: TrustTone; detail: string } {
+  switch (verifyStage) {
+    case "synthesis_agreed":
+      return { label: "Double-checked", tone: "green", detail: "Two independent AIs reviewed this and reached the same conclusion." };
+    case "opus_and_gpt":
+      return { label: "Double-checked", tone: "green", detail: "Reviewed by two independent AIs." };
+    case "synthesis_disagreed":
+      return { label: "Mixed views", tone: "amber", detail: "Two AIs reviewed this and saw it differently. Read why before you bet." };
+    case "gpt_only":
+      return { label: "Checked", tone: "green", detail: "Reviewed with independent fact-finding." };
+    case "opus_only":
+      return { label: "Checked", tone: "green", detail: "Reviewed with a web search to confirm the facts." };
+    default:
+      return { label: "Quick scan", tone: "muted", detail: "A fast first read of the rules, not yet double-checked." };
+  }
+}
+
+/**
+ * The kind of pick, in plain words. Fineprint picks are about a hidden rule; mispricings
+ * ("obvious" pass) are about the news already deciding the outcome.
+ */
+export function pickKind(pass: string, divergenceType?: string): { label: string; blurb: string } {
+  if (pass === "obvious" || divergenceType === "world_state") {
+    return { label: "The news moved", blurb: "What has already happened in the real world points one way, but the price hasn't caught up." };
+  }
+  return { label: "A hidden rule", blurb: "The official rules say something stricter or different from what the question makes you assume." };
+}
+
+/** Upside as a whole-number percent for "if it works out, +X%". Null when not computable. */
+export function upsidePercent(entryCents: number | null): number | null {
+  if (entryCents == null || entryCents <= 0 || entryCents >= 100) return null;
+  return Math.round(((100 - entryCents) / entryCents) * 100);
+}
+
 export function fmtBetSize(sizeUsd: number, betSide: string, priceCents: number) {
   const sharesValue = sizeUsd / (priceCents / 100);
   const maxReturn = sharesValue;

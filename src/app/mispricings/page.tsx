@@ -1,9 +1,9 @@
 "use client";
 
-// Mispricings tab — same view as Opportunities, different category. The route owns the
-// category state so a deep link / shared URL preserves which tab the user wanted to see.
+// Legacy route. The feed is now unified at "/", so this renders the same picks list with the
+// "news moved" reason preselected. Kept so existing links keep working.
 import { MarketsView } from "../page";
 
 export default function MispricingsPage() {
-  return <MarketsView category="mispricings" />;
+  return <MarketsView initialKind="news" />;
 }

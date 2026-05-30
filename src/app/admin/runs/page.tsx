@@ -81,8 +81,8 @@ export default function RunsPage() {
                       <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{fmtIstShort(j.submittedAt)}</td>
                       <td className="px-3 py-3 text-xs"><Link href={`/markets/${j.marketId}`} className="hover:text-[var(--accent)] truncate inline-block max-w-[28rem]" title={j.marketQuestion}>{j.marketQuestion}</Link></td>
                       <td className="px-3 py-3"><StatusBadge status={j.status} /></td>
-                      <td className="px-3 py-3 text-right text-xs text-[var(--text-dim)]">{j.lastPolledAt ? fmtIstShort(j.lastPolledAt) : "—"}</td>
-                      <td className="px-3 py-3 text-right mono text-xs">{j.costUsd > 0 ? fmtUsd(j.costUsd) : "—"}</td>
+                      <td className="px-3 py-3 text-right text-xs text-[var(--text-dim)]">{j.lastPolledAt ? fmtIstShort(j.lastPolledAt) : "-"}</td>
+                      <td className="px-3 py-3 text-right mono text-xs">{j.costUsd > 0 ? fmtUsd(j.costUsd) : "-"}</td>
                     </tr>
                   ))}
                 </tbody>

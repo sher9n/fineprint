@@ -22,7 +22,7 @@ export async function GET() {
       id: j.id,
       marketId: j.marketId,
       marketQuestion: j.market.eventTitle && j.market.groupItemTitle
-        ? `${j.market.eventTitle} — ${j.market.groupItemTitle}`
+        ? `${j.market.eventTitle}: ${j.market.groupItemTitle}`
         : j.market.question,
       openaiResponseId: j.openaiResponseId,
       model: j.model,

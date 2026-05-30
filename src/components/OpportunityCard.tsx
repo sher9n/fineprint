@@ -1,27 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { ChevronUp, ChevronDown, TrendingUp, AlertTriangle, Sparkles, Clock, BadgeCheck } from "lucide-react";
-import { useSession } from "next-auth/react";
-import { toast } from "sonner";
+import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  confidenceLabel,
-  stageLabel,
-  divergenceTypeLabel,
   describeBet,
-  hasThreeWayStructure,
-  opportunityScoreLabel,
   resolutionTimeline,
-  timeAgo,
+  pickKind,
+  upsidePercent,
 } from "@/lib/explain";
-import { fmtIst } from "@/lib/time";
-import { ScoreBadge } from "./ScoreBadge";
-import { DivergenceTooltip } from "./DivergenceTooltip";
-import { VerifyStageBadge } from "./VerifyStageBadge";
+import { TrustBadge } from "./TrustBadge";
+import { MismatchStat, ScoreStat } from "./PickStats";
 import { BookmarkButton } from "./BookmarkButton";
-import { passLabel } from "@/lib/model-label";
 
 interface CardProps {
   id: string;
@@ -50,21 +40,15 @@ interface CardProps {
     ruleImpliedProbability: number | null;
     expectedYesPayoutCents: number | null;
     expectedNoPayoutCents: number | null;
+    vibeInterpretation: string;
+    literalInterpretation: string;
   } | null;
   votes: { up: number; down: number; mine: number };
 }
 
 export function OpportunityCard(p: CardProps) {
-  const { data: session } = useSession();
-  const [myVote, setMyVote] = useState<number>(p.votes.mine);
-  const [up, setUp] = useState(p.votes.up);
-  const [down, setDown] = useState(p.votes.down);
-  const [voting, setVoting] = useState(false);
-
   if (!p.analysis) return null;
   const a = p.analysis;
-  const conf = confidenceLabel(a.divergenceScore);
-  const stage = stageLabel(a.pass);
   const bet = describeBet({
     betSide: a.betSide,
     yesPrice: p.yesPrice,
@@ -73,217 +57,85 @@ export function OpportunityCard(p: CardProps) {
     expectedNoPayoutCents: a.expectedNoPayoutCents,
     ruleImpliedProbability: a.ruleImpliedProbability,
   });
-  const threeWay = hasThreeWayStructure(a.expectedYesPayoutCents, a.expectedNoPayoutCents, a.ruleImpliedProbability);
-  const score = opportunityScoreLabel(a.edgeScore);
-  const displayQuestion = p.eventTitle && p.groupItemTitle ? `${p.eventTitle} — ${p.groupItemTitle}` : p.question;
-
-  async function vote(dir: 1 | -1) {
-    if (!session) {
-      toast.error("Sign in to vote on opportunities", { action: { label: "Sign in", onClick: () => (window.location.href = "/login") } });
-      return;
-    }
-    if (voting) return;
-    setVoting(true);
-    const newDir = myVote === dir ? 0 : dir;
-    const oldUp = up;
-    const oldDown = down;
-    const oldMine = myVote;
-    setMyVote(newDir);
-    setUp(up + (newDir === 1 ? 1 : 0) - (oldMine === 1 ? 1 : 0));
-    setDown(down + (newDir === -1 ? 1 : 0) - (oldMine === -1 ? 1 : 0));
-    try {
-      const res = await fetch(`/api/markets/${p.id}/vote`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ direction: newDir }),
-      });
-      if (!res.ok) throw new Error("vote failed");
-      const data = await res.json();
-      setUp(data.up);
-      setDown(data.down);
-      setMyVote(data.mine);
-    } catch {
-      setUp(oldUp);
-      setDown(oldDown);
-      setMyVote(oldMine);
-      toast.error("Could not save your vote");
-    } finally {
-      setVoting(false);
-    }
-  }
-
-  // Accent border:
-  //   - mispricings (pass='obvious'): high confidence = green (primary source), medium = amber
-  //   - fineprint synthesis: agreed = green, disagreed = amber
-  // Anything else: no accent.
-  let accentBorder = "";
-  if (a.pass === "obvious") {
-    if (a.divergenceScore >= 9) accentBorder = "border-l-2 border-l-[var(--green)]";
-    else if (a.divergenceScore >= 7) accentBorder = "border-l-2 border-l-[var(--amber)]";
-  } else if (p.verifyStage === "synthesis_agreed") {
-    accentBorder = "border-l-2 border-l-[var(--green)]";
-  } else if (p.verifyStage === "synthesis_disagreed") {
-    accentBorder = "border-l-2 border-l-[var(--amber)]";
-  }
-  const foundLabel = p.foundAt ? timeAgo(p.foundAt) : null;
+  const hasBet = bet.entryCents != null && bet.evPercent != null && bet.evPercent > 0;
+  const side = a.betSide === "YES" ? "YES" : a.betSide === "NO" ? "NO" : null;
+  const isYes = side === "YES";
+  const upside = upsidePercent(bet.entryCents);
+  const kind = pickKind(a.pass, a.divergenceType);
+  const title = p.eventTitle && p.groupItemTitle ? `${p.eventTitle}: ${p.groupItemTitle}` : p.question;
+  const moneyK = p.liquidity >= 1000 ? `$${(p.liquidity / 1000).toFixed(0)}k` : `$${p.liquidity.toFixed(0)}`;
 
   return (
-    <article className={cn("card p-5 hover:border-[var(--border-strong)] transition-colors group flex flex-col gap-4", accentBorder)}>
-      {/* Header: image + title + score */}
-      <Link href={`/markets/${p.id}`} className="flex items-start gap-3">
-        {p.imageUrl && (
-          <div className="shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-[var(--bg-elev-2)] border border-[var(--border)]">
-            <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <h3 className="text-base font-semibold leading-snug text-[var(--text)] group-hover:text-[var(--accent)] transition-colors line-clamp-2">{displayQuestion}</h3>
-          <div className="flex items-center gap-1.5 mt-1 text-xs text-[var(--text-muted)] flex-wrap">
-            <Clock className="w-3 h-3" />
-            <span>{resolutionTimeline(p.endDate, p.groupItemTitle)}</span>
-            <span aria-hidden>·</span>
-            <span>${(p.liquidity / 1000).toFixed(0)}k liquidity</span>
-            {(a.betSide === "YES" || a.betSide === "NO") && (
-              <>
-                <span aria-hidden>·</span>
-                <span title="The side our analysis suggests you buy">
-                  bet <strong className={a.betSide === "YES" ? "text-[var(--green)]" : "text-[var(--red)]"}>{a.betSide}</strong>
-                </span>
-              </>
-            )}
-            <span aria-hidden>·</span>
-            <span title={divergenceTypeLabel(a.divergenceType).explainer}>{divergenceTypeLabel(a.divergenceType).short}</span>
-            {threeWay && (
-              <>
-                <span aria-hidden>·</span>
-                <span className="inline-flex items-center gap-0.5 text-[var(--purple)]" title="Market has a tie-breaker rule (e.g. 50-50 fallback) affecting payouts">
-                  <AlertTriangle className="w-3 h-3" /> Tie-breaker
-                </span>
-              </>
-            )}
-            {foundLabel && (
-              <>
-                <span aria-hidden>·</span>
-                <span className="text-[var(--text-dim)]" title={`Found at ${fmtIst(p.foundAt!, "MMM d, HH:mm 'IST'")}`}>Found {foundLabel}</span>
-              </>
-            )}
-          </div>
-        </div>
-      </Link>
+    <article className="card lift relative flex flex-col overflow-hidden">
+      {/* Stretched link: whole card opens the detail page. Interactive controls sit above it. */}
+      <Link href={`/markets/${p.id}`} className="absolute inset-0 z-0" aria-label={title} />
 
-      {/* Quick facts row: score + divergence + price */}
-      <div className="flex items-center gap-2 text-xs flex-wrap">
-        <ScoreBadge
-          edgeScore={a.edgeScore}
-          divergenceScore={a.divergenceScore}
-          priceGap={a.priceGap}
-          liquidity={p.liquidity}
-          endDate={p.endDate}
-          pass={a.pass}
-          directionAgreement={a.directionAgreement}
-        />
-        <DivergenceTooltip divergenceScore={a.divergenceScore} divergenceType={a.divergenceType} pass={a.pass} />
-        <Fact
-          label="Price"
-          value={
-            p.yesPrice != null && p.noPrice != null
-              ? `${(p.yesPrice * 100).toFixed(0)}¢ / ${(p.noPrice * 100).toFixed(0)}¢`
-              : p.yesPrice != null
-                ? `${(p.yesPrice * 100).toFixed(0)}¢ / ${((1 - p.yesPrice) * 100).toFixed(0)}¢`
-                : "—"
-          }
-          help="YES / NO market price (what each share costs on Polymarket)"
-        />
-      </div>
+      <div className="p-5 sm:p-6 flex flex-col gap-4 flex-1">
+        {/* Top: kind + trust */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[12px] font-semibold text-[var(--text-muted)]">{kind.label}</span>
+          <TrustBadge stage={p.verifyStage} size="sm" />
+        </div>
 
-      {/* The recommendation — the heart of the card */}
-      {bet.entryCents != null && bet.evPercent != null && bet.evPercent > 0 ? (
-        <div className="rounded-xl bg-[var(--green-soft)] border border-[var(--green)]/20 p-4">
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <div className="flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4 text-[var(--green)]" />
-              <span className="text-[11px] uppercase tracking-wider font-medium text-[var(--green)]">The opportunity</span>
-            </div>
-            <span className="text-xs font-medium text-[var(--green)] mono">+{(((100 - bet.entryCents) / bet.entryCents) * 100).toFixed(0)}% expected return</span>
-          </div>
-          <p className="text-sm leading-relaxed text-[var(--text)]">
-            Buy <strong className={a.betSide === "YES" ? "text-[var(--green)]" : "text-[var(--red)]"}>{a.betSide}</strong> at{" "}
-            <strong className="mono">{bet.entryCents.toFixed(0)}¢</strong> per share. If correct, each share pays out about{" "}
-            <strong className="mono">100¢</strong>.
-          </p>
-        </div>
-      ) : (
-        <div className="rounded-xl bg-[var(--bg-elev-2)] border border-[var(--border)] p-4">
-          <div className="text-xs text-[var(--text-muted)]">No clear bet right now. Worth watching as prices change.</div>
-        </div>
-      )}
+        {/* Headline */}
+        <h3 className="font-display text-[20px] sm:text-[21px] leading-[1.25] text-[var(--text)] line-clamp-3">
+          {title}
+        </h3>
 
-      {/* Footer: vote + model + open */}
-      <div className="flex items-center justify-between pt-1 border-t border-[var(--border)] -mx-5 px-5 -mb-5 pb-3 mt-1">
-        <div className="inline-flex items-center gap-0.5">
-          <button
-            onClick={() => vote(1)}
-            disabled={voting}
-            aria-label="Upvote"
-            className={cn(
-              "p-1 rounded-md transition-colors",
-              myVote === 1 ? "text-[var(--green)] bg-[var(--green-soft)]" : "text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--bg-overlay)]"
-            )}
-          >
-            <ChevronUp className="w-4 h-4" />
-          </button>
-          <span className="mono text-xs tabular-nums text-[var(--text)] min-w-[1.5ch] text-center">{up - down}</span>
-          <button
-            onClick={() => vote(-1)}
-            disabled={voting}
-            aria-label="Downvote"
-            className={cn(
-              "p-1 rounded-md transition-colors",
-              myVote === -1 ? "text-[var(--red)] bg-[var(--red-soft)]" : "text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--bg-overlay)]"
-            )}
-          >
-            <ChevronDown className="w-4 h-4" />
-          </button>
-          <span className="mx-0.5 w-px h-4 bg-[var(--border)] inline-block" />
-          <BookmarkButton marketId={p.id} initial={!!p.bookmarked} size="sm" />
+        {/* Meta */}
+        <div className="text-[13px] text-[var(--text-muted)] -mt-1">
+          {resolutionTimeline(p.endDate, p.groupItemTitle)}
+          <span className="mx-2 text-[var(--text-dim)]">&middot;</span>
+          <span className="mono">{moneyK}</span> in play
         </div>
-        <div className="inline-flex items-center gap-2">
-          {p.verifyStage && p.verifyStage !== "initial" ? (
-            <VerifyStageBadge stage={p.verifyStage} size="sm" />
-          ) : (
-            <span
+
+        {/* Recommendation */}
+        <div className="mt-auto">
+          {hasBet && side ? (
+            <div
               className={cn(
-                "inline-flex items-center gap-0.5 mono text-xs",
-                a.pass === "opus" ? "text-[var(--purple)]" : "text-[var(--text-dim)]"
+                "rounded-[var(--radius-md)] p-4",
+                isYes ? "bg-[var(--green-soft)]" : "bg-[var(--red-soft)]"
               )}
-              title={a.pass === "opus" ? "Confirmed by a second-pass analysis with web search" : "Initial first-pass analysis"}
             >
-              {a.pass === "opus" && <BadgeCheck className="w-3 h-3" />}
-              {passLabel(a.model, a.pass)}
-            </span>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-display text-[22px] leading-none text-[var(--text)]">
+                  Buy <span className={isYes ? "text-[var(--green)]" : "text-[var(--red)]"}>{side}</span>
+                </span>
+                {upside != null && (
+                  <span className={cn("mono text-[15px] font-bold", isYes ? "text-[var(--green)]" : "text-[var(--red)]")}>
+                    +{upside}%
+                  </span>
+                )}
+              </div>
+              <div className="mt-1.5 text-[13px] text-[var(--text-muted)]">
+                Costs <span className="mono text-[var(--text)]">{bet.entryCents!.toFixed(0)}c</span>, pays{" "}
+                <span className="mono text-[var(--text)]">$1.00</span> if it happens
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-[var(--radius-md)] p-4 bg-[var(--bg-sunken)] border border-dashed border-[var(--border-strong)]">
+              <div className="font-display text-[17px] text-[var(--text)]">Worth watching</div>
+              <div className="mt-1 text-[13px] text-[var(--text-muted)]">No clear bet at today&apos;s price. We&apos;ll keep an eye on it.</div>
+            </div>
           )}
         </div>
-        <Link href={`/markets/${p.id}`} className="text-xs text-[var(--accent)] hover:underline">
-          See full analysis →
-        </Link>
+      </div>
+
+      {/* Footer: strength + save + open */}
+      <div className="px-5 sm:px-6 py-3 border-t border-[var(--border)] flex items-center justify-between gap-x-3 gap-y-2.5 flex-wrap">
+        <div className="relative z-10 flex items-center gap-2">
+          <MismatchStat score={a.divergenceScore} isMispricing={a.pass === "obvious"} vibe={a.vibeInterpretation} literal={a.literalInterpretation} />
+          <ScoreStat edgeScore={a.edgeScore} divergenceScore={a.divergenceScore} priceGap={a.priceGap} liquidity={p.liquidity} endDate={p.endDate} pass={a.pass} directionAgreement={a.directionAgreement} />
+        </div>
+        <div className="flex items-center gap-2.5 ml-auto shrink-0">
+          <span className="relative z-10"><BookmarkButton marketId={p.id} initial={!!p.bookmarked} size="md" /></span>
+          <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--accent)]">
+            <span className="xl:hidden">See why</span>
+            <ArrowRight className="w-4 h-4" />
+          </span>
+        </div>
       </div>
     </article>
-  );
-}
-
-function Fact({ label, value, accent, help }: { label: string; value: string; accent?: "green" | "red" | "amber" | "muted"; help?: string }) {
-  const valueColor =
-    accent === "green" ? "text-[var(--green)]"
-    : accent === "red" ? "text-[var(--red)]"
-    : accent === "amber" ? "text-[var(--amber)]"
-    : "text-[var(--text)]";
-  return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--bg-elev-2)] border border-[var(--border)]"
-      title={help}
-    >
-      <span className="text-[9px] uppercase tracking-wider text-[var(--text-dim)]">{label}</span>
-      <span className={`mono text-[11px] font-medium ${valueColor}`}>{value}</span>
-    </span>
   );
 }

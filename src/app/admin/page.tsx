@@ -25,7 +25,7 @@ export default function AdminHome() {
       <AppShell>
         <div className="max-w-2xl mx-auto px-4 py-12 text-center">
           <h1 className="text-xl font-semibold">Admins only</h1>
-          <Link href="/" className="text-sm text-[var(--accent)] hover:underline mt-3 inline-block">Back to opportunities</Link>
+          <Link href="/" className="text-sm text-[var(--accent)] hover:underline mt-3 inline-block">Back to picks</Link>
         </div>
       </AppShell>
     );
@@ -64,7 +64,7 @@ export default function AdminHome() {
         {budget && (
           <div className="card p-5">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-medium">Today's LLM spend</h2>
+              <h2 className="text-sm font-medium">Today&apos;s LLM spend</h2>
               <span className="mono text-sm">{fmtUsd(budget.spent)} / {fmtUsd(budget.budget)}</span>
             </div>
             <div className="h-2 bg-[var(--bg-elev-2)] rounded-full overflow-hidden">

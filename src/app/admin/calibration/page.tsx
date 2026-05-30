@@ -34,7 +34,7 @@ export default function CalibrationPage() {
       <AppShell>
         <div className="max-w-2xl mx-auto p-12 text-center">
           <h1 className="text-xl font-semibold">Admins only</h1>
-          <Link href="/" className="text-sm text-[var(--accent)] hover:underline mt-3 inline-block">Back to opportunities</Link>
+          <Link href="/" className="text-sm text-[var(--accent)] hover:underline mt-3 inline-block">Back to picks</Link>
         </div>
       </AppShell>
     );
@@ -72,7 +72,7 @@ export default function CalibrationPage() {
               <StatCard label="Resolved" value={data.resolved.toString()} sub={`${data.open} still open`} />
               <StatCard
                 label="Win rate"
-                value={data.resolved > 0 ? `${(data.winRate * 100).toFixed(0)}%` : "—"}
+                value={data.resolved > 0 ? `${(data.winRate * 100).toFixed(0)}%` : "-"}
                 sub={data.resolved > 0 ? `${data.won}W / ${data.lost}L` : ""}
                 accent={data.winRate >= 0.5 ? "green" : data.winRate > 0 ? "red" : undefined}
               />
@@ -157,7 +157,7 @@ function BarRow({ label, won, lost, winRate }: { label: string; won: number; los
       <div className="flex justify-between text-xs mb-1">
         <span className="text-[var(--text)]">{label}</span>
         <span className="mono text-[var(--text-muted)]">
-          {won}W / {lost}L · {total > 0 ? `${pct.toFixed(0)}%` : "—"}
+          {won}W / {lost}L · {total > 0 ? `${pct.toFixed(0)}%` : "-"}
         </span>
       </div>
       <div className="h-2 bg-[var(--bg-elev-2)] rounded-full overflow-hidden">

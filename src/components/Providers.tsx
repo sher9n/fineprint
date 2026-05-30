@@ -23,12 +23,14 @@ export function Providers({ children, session }: { children: ReactNode; session:
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
           <Toaster
-            position="bottom-right"
+            position="bottom-center"
             toastOptions={{
               style: {
                 background: "var(--bg-elev)",
                 color: "var(--text)",
-                border: "1px solid var(--border)",
+                border: "1px solid var(--border-strong)",
+                borderRadius: "14px",
+                boxShadow: "var(--shadow-lg)",
               },
             }}
           />

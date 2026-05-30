@@ -2,7 +2,6 @@
 
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { Mail, Palette, Bell } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -12,9 +11,9 @@ export default function SettingsPage() {
   if (!session) {
     return (
       <AppShell>
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12 text-center">
-          <h1 className="text-xl font-semibold mb-2">Sign in to manage your settings</h1>
-          <Link href="/login" className="btn btn-primary">Sign in</Link>
+        <div className="max-w-md mx-auto px-4 sm:px-6 py-20 text-center">
+          <h1 className="font-display text-[26px] text-[var(--text)] mb-2">Sign in to manage settings</h1>
+          <Link href="/login" className="btn btn-primary btn-lg">Sign in</Link>
         </div>
       </AppShell>
     );
@@ -22,39 +21,30 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        </div>
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-5">
+        <h1 className="font-display text-[32px] sm:text-[42px] leading-[1.06] tight text-[var(--text)] mb-2">Settings</h1>
 
-        <Section icon={Mail} title="Account">
+        <Section title="Account">
           <Row label="Email">{session.user.email}</Row>
           {session.user.isAdmin && <Row label="Role">Admin</Row>}
         </Section>
 
-        <Section icon={Palette} title="Appearance">
-          <Row label="Theme">
-            <ThemeToggle />
-          </Row>
+        <Section title="Appearance">
+          <Row label="Light or dark"><ThemeToggle /></Row>
         </Section>
 
-        <Section icon={Bell} title="Notifications">
-          <div className="text-sm text-[var(--text-muted)]">
-            Email notifications for new high-confidence opportunities coming soon.
-          </div>
+        <Section title="Notifications">
+          <div className="text-[15px] text-[var(--text-muted)]">Email alerts for new strong picks are coming soon.</div>
         </Section>
       </div>
     </AppShell>
   );
 }
 
-function Section({ icon: Icon, title, children }: { icon: React.ComponentType<{ className?: string }>; title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="card p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <Icon className="w-4 h-4 text-[var(--text-muted)]" />
-        <h2 className="text-sm font-medium">{title}</h2>
-      </div>
+    <div className="card card-pad">
+      <h2 className="font-display text-[18px] text-[var(--text)] mb-3.5">{title}</h2>
       <div className="space-y-3">{children}</div>
     </div>
   );
@@ -63,8 +53,8 @@ function Section({ icon: Icon, title, children }: { icon: React.ComponentType<{ 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 py-1">
-      <div className="text-sm text-[var(--text-muted)]">{label}</div>
-      <div className="text-sm">{children}</div>
+      <div className="text-[15px] text-[var(--text-muted)]">{label}</div>
+      <div className="text-[15px] text-[var(--text)]">{children}</div>
     </div>
   );
 }

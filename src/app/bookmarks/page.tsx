@@ -27,7 +27,7 @@ export default function BookmarksPage() {
       <AppShell>
         <div className="max-w-md mx-auto px-4 sm:px-6 py-20 text-center">
           <h1 className="font-display text-[26px] text-[var(--text)] mb-2">Sign in to save picks</h1>
-          <p className="text-[15px] text-[var(--text-muted)] mb-6">Tap the bookmark on any pick to keep it in your own watch list.</p>
+          <p className="text-[15px] text-[var(--text-muted)] mb-6">Open any pick and tap Bookmark to keep it in your watch list.</p>
           <Link href="/login" className="btn btn-primary btn-lg">Sign in</Link>
         </div>
       </AppShell>
@@ -53,14 +53,14 @@ export default function BookmarksPage() {
         ) : markets.length === 0 ? (
           <div className="card card-pad text-center py-16">
             <div className="font-display text-[20px] text-[var(--text)] mb-2">No saved picks yet</div>
-            <p className="text-[15px] text-[var(--text-muted)] max-w-sm mx-auto mb-5">Tap the bookmark on any pick to save it here.</p>
+            <p className="text-[15px] text-[var(--text-muted)] max-w-sm mx-auto mb-5">Open a pick and tap Bookmark to save it here.</p>
             <Link href="/" className="btn btn-primary">See today&apos;s picks</Link>
           </div>
         ) : (
           <>
             <div className="text-[14px] text-[var(--text-muted)] mb-5">{markets.length} saved</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 stagger">
-              {markets.map((m) => <OpportunityCard key={m.id} {...m} />)}
+              {markets.map((m) => <OpportunityCard key={m.id} {...m} showBookmark />)}
             </div>
           </>
         )}

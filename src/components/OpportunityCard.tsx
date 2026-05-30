@@ -11,6 +11,7 @@ import {
 } from "@/lib/explain";
 import { TrustBadge } from "./TrustBadge";
 import { MismatchStat, ScoreStat } from "./PickStats";
+import { BookmarkButton } from "./BookmarkButton";
 import { fmtIstShort } from "@/lib/time";
 
 interface CardProps {
@@ -25,6 +26,7 @@ interface CardProps {
   endDate: string | null;
   verifyStage?: string;
   foundAt?: string | null;
+  showBookmark?: boolean;
   analysis: {
     id: string;
     pass: string;
@@ -135,10 +137,15 @@ export function OpportunityCard(p: CardProps) {
           <MismatchStat score={a.divergenceScore} isMispricing={a.pass === "obvious"} vibe={a.vibeInterpretation} literal={a.literalInterpretation} />
           <ScoreStat edgeScore={a.edgeScore} divergenceScore={a.divergenceScore} priceGap={a.priceGap} liquidity={p.liquidity} endDate={p.endDate} pass={a.pass} directionAgreement={a.directionAgreement} />
         </div>
-        <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--accent)] ml-auto shrink-0">
-          <span className="xl:hidden">See why</span>
-          <ArrowRight className="w-4 h-4" />
-        </span>
+        <div className="flex items-center gap-2.5 ml-auto shrink-0">
+          {p.showBookmark && (
+            <span className="relative z-10"><BookmarkButton marketId={p.id} initial size="md" /></span>
+          )}
+          <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--accent)]">
+            <span className="xl:hidden">See why</span>
+            <ArrowRight className="w-4 h-4" />
+          </span>
+        </div>
       </div>
     </article>
   );

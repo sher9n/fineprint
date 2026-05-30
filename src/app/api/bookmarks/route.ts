@@ -56,6 +56,20 @@ export async function GET(_req: NextRequest) {
     },
   });
 
+  // foundAt = creation time of the EARLIEST escalated/verified pass per market (opus/gpt/
+  // synthesis, or obvious for mispricings). Mirrors /api/markets so saved cards show the same
+  // "Found ... IST" discovery stamp. groupBy over all analyses, not just the latest slice.
+  const foundAtMap = new Map<string, Date>();
+  const bookmarkedMarketIds = bookmarks.map((b) => b.market.id);
+  if (bookmarkedMarketIds.length > 0) {
+    const groups = await prisma.analysis.groupBy({
+      by: ["marketId"],
+      where: { marketId: { in: bookmarkedMarketIds }, pass: { in: ["opus", "gpt_deep", "synthesis", "obvious"] } },
+      _min: { createdAt: true },
+    });
+    for (const g of groups) if (g._min.createdAt) foundAtMap.set(g.marketId, g._min.createdAt);
+  }
+
   // Pull votes for the headline (latest current-rules) analysis of each bookmarked market in
   // one round-trip rather than includeing them on every analysis row.
   type VoteRow = { userId: string; direction: number; analysisId: string };
@@ -113,7 +127,7 @@ export async function GET(_req: NextRequest) {
       endDate: m.endDate,
       imageUrl: m.imageUrl,
       verifyStage,
-      foundAt: null,
+      foundAt: foundAtMap.get(m.id) ?? null,
       bookmarkedAt,
       hasObvious: !!obviousA,
       analysis: latest && {

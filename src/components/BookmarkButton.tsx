@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Bookmark, BookmarkCheck } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ export function BookmarkButton({
   variant?: "icon" | "labeled";
 }) {
   const { data: session } = useSession();
+  const qc = useQueryClient();
   const [bookmarked, setBookmarked] = useState(initial);
   const [pending, setPending] = useState(false);
 
@@ -46,6 +48,8 @@ export function BookmarkButton({
       });
       if (!res.ok) throw new Error("save failed");
       toast.success(next ? "Bookmarked" : "Removed from bookmarks", { duration: 1500 });
+      // Keep the saved-picks list in sync: a removal here should drop the card from /bookmarks.
+      qc.invalidateQueries({ queryKey: ["my-bookmarks"] });
     } catch {
       setBookmarked(!next);
       toast.error("Could not save your bookmark");

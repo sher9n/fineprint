@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { impliedBetSide } from "@/lib/explain";
+import { outcomeLean, reviewsConflict } from "@/lib/explain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -139,16 +139,14 @@ export async function GET(req: NextRequest) {
         const currentNonObvious = m.analyses.find((x) => x.pass !== "obvious" && x.rulesHash === m.rulesHash);
         latest = currentNonObvious ?? m.analyses[0];
       }
-      // Compare implied bet direction, not raw edge_direction. A GPT fact-finder that returns
-      // edge_direction=NONE because there's no rules-vs-vibe gap, yet estimates P(YES) far above
-      // the market price, is implicitly recommending YES — and "synthesis_disagreed" would be
-      // misleading. See impliedBetSide() docs.
+      // "Agreed" vs "disagreed" reflects the OUTCOME each model concluded (rule_implied_probability
+      // vs 50%), not the price-edge. Two reviews disagree only when both clearly lean opposite ways;
+      // a toss-up on either side is not a disagreement. See outcomeLean() docs.
       let verifyStage: string;
       if (synthA) {
-        const opusSide = opusA ? impliedBetSide(opusA, opusA.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
-        const gptSide = gptA ? impliedBetSide(gptA, gptA.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
-        const bothDirected = opusSide !== "NONE" && gptSide !== "NONE";
-        verifyStage = bothDirected && opusSide === gptSide ? "synthesis_agreed" : "synthesis_disagreed";
+        const opusSide = outcomeLean(opusA?.ruleImpliedProbability);
+        const gptSide = outcomeLean(gptA?.ruleImpliedProbability);
+        verifyStage = reviewsConflict(opusSide, gptSide) ? "synthesis_disagreed" : "synthesis_agreed";
       }
       else if (opusA && gptA) verifyStage = "opus_and_gpt";
       else if (opusA) verifyStage = "opus_only";

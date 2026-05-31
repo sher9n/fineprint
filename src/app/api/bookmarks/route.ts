@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { impliedBetSide } from "@/lib/explain";
+import { outcomeLean, reviewsConflict } from "@/lib/explain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,10 +101,9 @@ export async function GET(_req: NextRequest) {
 
     let verifyStage = "initial";
     if (synthA) {
-      const opusSide = opusA ? impliedBetSide(opusA, opusA.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
-      const gptSide = gptA ? impliedBetSide(gptA, gptA.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
-      const bothDirected = opusSide !== "NONE" && gptSide !== "NONE";
-      verifyStage = bothDirected && opusSide === gptSide ? "synthesis_agreed" : "synthesis_disagreed";
+      const opusSide = outcomeLean(opusA?.ruleImpliedProbability);
+      const gptSide = outcomeLean(gptA?.ruleImpliedProbability);
+      verifyStage = reviewsConflict(opusSide, gptSide) ? "synthesis_disagreed" : "synthesis_agreed";
     } else if (opusA && gptA) verifyStage = "opus_and_gpt";
     else if (opusA) verifyStage = "opus_only";
     else if (gptA) verifyStage = "gpt_only";

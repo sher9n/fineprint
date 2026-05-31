@@ -19,7 +19,7 @@ import { FindingsView } from "@/components/FindingsView";
 import { ScenarioBreakdown } from "@/components/ScenarioBreakdown";
 import { cn } from "@/lib/utils";
 import {
-  describeBet, impliedBetSide, resolutionTimeline, hasThreeWayStructure, solveThreeWay,
+  describeBet, outcomeLean, reviewsConflict, resolutionTimeline, hasThreeWayStructure, solveThreeWay,
   pickKind, upsidePercent, trustLabel,
 } from "@/lib/explain";
 import { fmtIst, fmtIstShort } from "@/lib/time";
@@ -234,13 +234,13 @@ export default function MarketDetailPage() {
     null,
   );
 
-  const opusSide = opusAnalysis ? impliedBetSide(opusAnalysis, opusAnalysis.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
-  const gptSide = gptAnalysis ? impliedBetSide(gptAnalysis, gptAnalysis.yesPriceAtAnalysis ?? m.yesPrice) : "NONE";
+  // Panels + agreement use the OUTCOME each model concludes (rule_implied_probability vs 50%), not
+  // the price-edge, so the "Leans YES/NO" labels match the reasoning. Two reviews "disagree" only
+  // when both have a clear lean and those leans are opposite.
+  const opusSide = outcomeLean(opusAnalysis?.ruleImpliedProbability);
+  const gptSide = outcomeLean(gptAnalysis?.ruleImpliedProbability);
   const agreement: "agree" | "disagree" | null =
-    opusAnalysis && gptAnalysis
-      ? opusSide !== "NONE" && gptSide !== "NONE" && opusSide === gptSide ? "agree"
-        : opusSide === gptSide ? null : "disagree"
-      : null;
+    opusAnalysis && gptAnalysis ? (reviewsConflict(opusSide, gptSide) ? "disagree" : "agree") : null;
   const polymarketUrl = marketDisplayUrl(m);
   const displayQuestion = m.eventTitle && m.groupItemTitle ? `${m.eventTitle}: ${m.groupItemTitle}` : m.question;
 
@@ -442,7 +442,7 @@ export default function MarketDetailPage() {
           <div className="rounded-[var(--radius-lg)] bg-[var(--amber-soft)] p-4 flex items-start gap-2.5 text-[14px]">
             <AlertTriangle className="w-4 h-4 text-[var(--amber)] shrink-0 mt-0.5" />
             <span className="text-[var(--text)]">
-              Our two reviews disagree: one leans {opusSide === "NONE" ? "no bet" : `buy ${opusSide}`}, the other leans {gptSide === "NONE" ? "no bet" : `buy ${gptSide}`}. The recommendation above is our best reconciliation. Read both reviews below before you decide.
+              Our two reviews disagree on the likely outcome: one leans {opusSide}, the other leans {gptSide}. The recommendation above is our best reconciliation. Read both reviews below before you decide.
             </span>
           </div>
         )}

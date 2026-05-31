@@ -123,6 +123,27 @@ export function impliedBetSide(
 }
 
 /**
+ * Which OUTCOME a model concludes is more likely, from its rule_implied_probability (its estimate
+ * of P(YES) per the rules), independent of the market price. This is the "reasoning" direction —
+ * what the analysis concludes will happen — as opposed to impliedBetSide, which is the "edge"
+ * direction (which side is the better BET vs the current price). They diverge when a model thinks
+ * an outcome is unlikely in absolute terms but still cheaper than its estimate (e.g. P(YES)=25%
+ * against a 20c price: a thin YES *edge*, yet the reasoning still leans NO). A neutral band around
+ * 50% reports no clear lean.
+ */
+export function outcomeLean(ruleImpliedProbability: number | null | undefined): "YES" | "NO" | "NONE" {
+  if (ruleImpliedProbability == null) return "NONE";
+  if (ruleImpliedProbability >= 0.55) return "YES";
+  if (ruleImpliedProbability <= 0.45) return "NO";
+  return "NONE";
+}
+
+/** Two reviews genuinely disagree only when both have a clear lean and those leans are opposite. */
+export function reviewsConflict(a: "YES" | "NO" | "NONE", b: "YES" | "NO" | "NONE"): boolean {
+  return a !== "NONE" && b !== "NONE" && a !== b;
+}
+
+/**
  * Detect markets that have a tie-breaker / fallback rule. Two structures appear in practice:
  *   - "Resolves to Other" or no-payout fallback: sum(E_yes, E_no) < 1
  *   - "Resolves 50-50" fallback (the common one): sum(E_yes, E_no) stays at 1, but the model's

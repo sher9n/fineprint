@@ -261,7 +261,16 @@ export default function MarketDetailPage() {
     );
   }
 
-  const threeWay = hasThreeWayStructure(a.expectedYesPayoutCents, a.expectedNoPayoutCents, a.ruleImpliedProbability);
+  // Detect a 50-50 / three-way fallback from the BEST structural analysis across the current-rules
+  // analyses, not just the headline. The world_state/obvious pass routinely ignores a 50-50
+  // fallback that Opus models (claiming a clean 100c payout), so trust whichever analysis actually
+  // saw the structure and use its expected payouts for the headline return + scenario split.
+  const structSource =
+    [opusAnalysis, synthesisAnalysis, gptAnalysis, a].find(
+      (x) => !!x && hasThreeWayStructure(x.expectedYesPayoutCents, x.expectedNoPayoutCents, x.ruleImpliedProbability),
+    ) ?? null;
+  const threeWay = !!structSource;
+  const payoutBasis = structSource ?? a;
   const kind = pickKind(a.pass, a.divergenceType);
   const trust = trustLabel(synthesisAnalysis ? (agreement === "agree" ? "synthesis_agreed" : agreement === "disagree" ? "synthesis_disagreed" : "opus_and_gpt") : gptAnalysis ? "gpt_only" : opusAnalysis ? "opus_only" : "initial");
 
@@ -271,13 +280,22 @@ export default function MarketDetailPage() {
   const effectiveYes = liveYes ?? m.yesPrice;
   const effectiveNo = liveNo ?? m.noPrice;
 
+  // Use the structural analysis's payouts so a 50-50 fallback yields a realistic (~50c) expected
+  // payout instead of a naive $1, both for the live recommendation and the scenario breakdown.
   const bet = describeBet({
     betSide: a.betSide, yesPrice: effectiveYes, noPrice: effectiveNo,
-    expectedYesPayoutCents: a.expectedYesPayoutCents, expectedNoPayoutCents: a.expectedNoPayoutCents,
-    ruleImpliedProbability: a.ruleImpliedProbability,
+    expectedYesPayoutCents: payoutBasis.expectedYesPayoutCents, expectedNoPayoutCents: payoutBasis.expectedNoPayoutCents,
+    ruleImpliedProbability: payoutBasis.ruleImpliedProbability,
+  });
+  // Same EV math at the price we ORIGINALLY analyzed at. Lets us tell "the edge evaporated" (it was
+  // real, the price moved) apart from "never a clear bet" (a coin flip the moment we looked).
+  const analysisBet = describeBet({
+    betSide: a.betSide, yesPrice: a.yesPriceAtAnalysis, noPrice: a.noPriceAtAnalysis,
+    expectedYesPayoutCents: payoutBasis.expectedYesPayoutCents, expectedNoPayoutCents: payoutBasis.expectedNoPayoutCents,
+    ruleImpliedProbability: payoutBasis.ruleImpliedProbability,
   });
   const verificationSteps: string[] = a.verificationSteps ? JSON.parse(a.verificationSteps) : [];
-  const scenarios = threeWay ? solveThreeWay(a.ruleImpliedProbability, a.expectedYesPayoutCents, a.expectedNoPayoutCents) : null;
+  const scenarios = threeWay ? solveThreeWay(payoutBasis.ruleImpliedProbability, payoutBasis.expectedYesPayoutCents, payoutBasis.expectedNoPayoutCents) : null;
 
   const analysisEntryFraction = a.betSide === "YES" ? a.yesPriceAtAnalysis : a.noPriceAtAnalysis;
   const liveEntryCents = bet.entryCents;
@@ -286,9 +304,18 @@ export default function MarketDetailPage() {
 
   const side = a.betSide === "YES" ? "YES" : a.betSide === "NO" ? "NO" : null;
   const isYes = side === "YES";
-  const upside = upsidePercent(bet.entryCents);
-  const goodBet = bet.entryCents != null && bet.evPercent != null && bet.evPercent > 0 && side;
-  const evaporated = bet.entryCents != null && bet.evPercent != null && bet.evPercent <= 0 && analysisEntryFraction != null && side;
+  // Bug 2: require a MEANINGFUL live edge, and treat an entry at the extreme (basically resolved,
+  // no profit room) as no edge. A sliver of positive EV (e.g. +0.05% at a 100c price) is not a bet.
+  const MIN_LIVE_EDGE = 0.03;
+  const hasLiveEdge = bet.evPercent != null && bet.evPercent >= MIN_LIVE_EDGE && bet.entryCents != null && bet.entryCents < 98;
+  const hadEdge = analysisBet.evPercent != null && analysisBet.evPercent >= MIN_LIVE_EDGE;
+  const goodBet = !!side && hasLiveEdge;
+  const evaporated = !!side && !hasLiveEdge && hadEdge && analysisEntryFraction != null;
+  // "if it works out" assumes a $1 win; on a 50-50 fallback that's false, so show the
+  // expected-payout-based (probability-weighted) return there instead.
+  const upside = threeWay
+    ? (bet.evPercent != null && bet.evPercent > 0 ? Math.round(bet.evPercent * 100) : null)
+    : upsidePercent(bet.entryCents);
 
   return (
     <AppShell>
@@ -334,7 +361,7 @@ export default function MarketDetailPage() {
               {upside != null && (
                 <span className="ml-auto inline-flex flex-col items-end">
                   <span className="mono text-[24px] sm:text-[28px] font-bold leading-none" style={{ color: isYes ? "var(--green)" : "var(--red)" }}>+{upside}%</span>
-                  <span className="text-[12px] text-[var(--text-muted)]">if it works out</span>
+                  <span className="text-[12px] text-[var(--text-muted)]">{threeWay ? "on average" : "if it works out"}</span>
                 </span>
               )}
             </div>
@@ -378,10 +405,13 @@ export default function MarketDetailPage() {
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="font-display text-[20px] text-[var(--text)]">No clear bet right now</div>
-                <p className="text-[15px] text-[var(--text-muted)] mt-1.5">The price already matches what the rules say. There&apos;s a real wrinkle worth understanding below, but no obvious edge today.</p>
+                <p className="text-[15px] text-[var(--text-muted)] mt-1.5">{scenarios ? "This market most likely lands on its 50-50 fallback, so neither side has a real edge at today's price. The breakdown is below." : "The price already matches what the rules say. There's a real wrinkle worth understanding below, but no obvious edge today."}</p>
               </div>
               <LivePriceBadge liveData={liveData} isFetching={isFetchingLive} onRefresh={() => refetchLive()} />
             </div>
+            {scenarios && side && bet.entryCents != null && (
+              <ScenarioBreakdown betSide={side as "YES" | "NO"} entryCents={bet.entryCents} pYes={scenarios.pYes} pNo={scenarios.pNo} pFallback={scenarios.pFallback} />
+            )}
           </div>
         )}
 

@@ -15,6 +15,7 @@ function nextRunMs(hourIst: number): number {
 let dailyRunning = false;
 let pollRunning = false;
 let deepResearchPollRunning = false;
+let refreshRunning = false;
 
 async function fireDailyRun() {
   if (!llmCallsEnabled()) {
@@ -160,6 +161,22 @@ async function fireDeepResearchPoll() {
   }
 }
 
+async function fireMarketRefresh() {
+  if (refreshRunning) return;
+  refreshRunning = true;
+  try {
+    const { refreshSurfacedMarketPrices } = await import("@/lib/refresh");
+    const r = await refreshSurfacedMarketPrices();
+    if (r.updated > 0 || r.nowClosed > 0 || r.errors > 0) {
+      console.log(`[scheduler] price refresh: checked ${r.checked}, updated ${r.updated}, now-closed ${r.nowClosed}, errors ${r.errors}`);
+    }
+  } catch (e) {
+    console.error("[scheduler] price refresh failed", e);
+  } finally {
+    refreshRunning = false;
+  }
+}
+
 async function catchUpDailyRunIfMissed(hourIst: number) {
   try {
     const { prisma } = await import("@/lib/prisma");
@@ -195,6 +212,11 @@ export function scheduleDaily() {
   // Poll OpenAI for in-flight deep-research jobs every 60s.
   setInterval(fireDeepResearchPoll, 60 * 1000);
   setTimeout(fireDeepResearchPoll, 10 * 1000);
+
+  // Hourly: refresh live price + open/closed status for surfaced markets so cards don't show stale
+  // prices or already-resolved markets between the daily 05:00 ingest. Free (Gamma + DB only).
+  setInterval(fireMarketRefresh, 60 * 60 * 1000);
+  setTimeout(fireMarketRefresh, 90 * 1000);
 
   // Catch up if today's scheduled run was missed (e.g., dev server restarted after 5am IST).
   setTimeout(() => catchUpDailyRunIfMissed(hour), 5000);

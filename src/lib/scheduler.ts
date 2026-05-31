@@ -56,18 +56,23 @@ async function fireDailyRun() {
       const markets = await pickMarketsForOpusFirstPass(2000);
       let verifierBatchId: string | null = null;
       let obviousBatchId: string | null = null;
+      const submitErrors: string[] = [];
       if (markets.length > 0) {
         try {
           verifierBatchId = await submitVerifierBatch(markets);
           console.log(`[scheduler] verifier (fineprint) batch ${verifierBatchId} submitted (${markets.length} markets)`);
         } catch (e) {
-          console.error(`[scheduler] verifier batch submit failed:`, String(e).slice(0, 200));
+          const msg = String(e instanceof Error ? e.message : e).slice(0, 300);
+          submitErrors.push(`verifier: ${msg}`);
+          console.error(`[scheduler] verifier batch submit failed:`, msg);
         }
         try {
           obviousBatchId = await submitObviousBatch(markets);
           console.log(`[scheduler] obvious (mispricings) batch ${obviousBatchId} submitted (${markets.length} markets)`);
         } catch (e) {
-          console.error(`[scheduler] obvious batch submit failed:`, String(e).slice(0, 200));
+          const msg = String(e instanceof Error ? e.message : e).slice(0, 300);
+          submitErrors.push(`obvious: ${msg}`);
+          console.error(`[scheduler] obvious batch submit failed:`, msg);
         }
       } else {
         console.log(`[scheduler] no markets to analyze; skipping batch submission`);
@@ -76,7 +81,10 @@ async function fireDailyRun() {
         where: { id: run.id },
         data: {
           finishedAt: new Date(),
-          status: "success",
+          // "partial" (not "success") when a sub-batch submit threw, so the failure is visible in
+          // the DB / admin Runs page instead of being silently swallowed into a green run.
+          status: submitErrors.length > 0 ? "partial" : "success",
+          errors: submitErrors.length > 0 ? submitErrors.join(" | ") : null,
           marketsAdded: ing.added,
           marketsUpdated: ing.updated,
           marketsAnalyzed: markets.length,

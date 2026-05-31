@@ -26,6 +26,29 @@ const PRICE_LIVE_FILTER = [
   { OR: [{ noPrice: null }, { noPrice: { gt: 0.01, lt: 0.99 } }] },
 ];
 
+// The verifier user-message build does several DB queries per market (event + negRisk siblings
+// and a pgvector similarity scan in buildMarketContext). An UNBOUNDED Promise.all over a large
+// pool opens thousands of concurrent queries and exhausts the capped connection pool, so the
+// whole submit throws on pool_timeout. That is how the 31 May verifier batch was lost (1671
+// backlog markets) while the market-blind obvious batch went through. Bound the per-market
+// context build to at or below the DB connection_limit. Override via env for a faster one-off
+// backfill against a larger pool (paired with a higher DB_CONNECTION_LIMIT).
+const VERIFIER_CONTEXT_CONCURRENCY = Math.max(1, parseInt(process.env.VERIFIER_CONTEXT_CONCURRENCY ?? "4", 10) || 4);
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) || 1 }, () => worker()));
+  return results;
+}
+
 async function buildMarketContext(market: Market): Promise<string> {
   const sections: string[] = [];
 
@@ -182,18 +205,16 @@ export async function submitVerifierBatch(markets: Market[], opts: { purpose?: s
   const client = anthropic();
   const model = VERIFIER_MODEL;
 
-  const requests = await Promise.all(
-    markets.map(async (m) => ({
-      custom_id: m.id,
-      params: {
-        model,
-        max_tokens: 3072,
-        system: [{ type: "text" as const, text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" as const } }],
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 } as never],
-        messages: [{ role: "user" as const, content: await buildVerifierUserMessage(m) }],
-      },
-    })),
-  );
+  const requests = await mapWithConcurrency(markets, VERIFIER_CONTEXT_CONCURRENCY, async (m) => ({
+    custom_id: m.id,
+    params: {
+      model,
+      max_tokens: 3072,
+      system: [{ type: "text" as const, text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" as const } }],
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 } as never],
+      messages: [{ role: "user" as const, content: await buildVerifierUserMessage(m) }],
+    },
+  }));
 
   const batch = await client.messages.batches.create({ requests });
 

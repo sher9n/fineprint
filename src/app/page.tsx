@@ -15,12 +15,12 @@ type Kind = "" | "rule" | "news";
 type Verify = "" | "one" | "both" | "agree" | "disagree" | "first";
 
 const SORTS: { id: Sort; label: string }[] = [
+  { id: "new", label: "Newest" },
   { id: "score", label: "Best score" },
   { id: "mismatch", label: "Biggest mismatch" },
   { id: "upside", label: "Best upside" },
   { id: "votes", label: "Most upvoted" },
   { id: "soon", label: "Ending soon" },
-  { id: "new", label: "Newest" },
 ];
 
 // Maps the friendly verification choice to the API's verifyStage value. The synthesis variants
@@ -88,7 +88,7 @@ export default function Home() {
 
 export function MarketsView({ initialKind = "" as Kind }: { initialKind?: Kind }) {
   const [q, setQ] = useState("");
-  const [sort, setSort] = useState<Sort>("score");
+  const [sort, setSort] = useState<Sort>("new");
   const [kind, setKind] = useState<Kind>(initialKind);
   const [minDiv, setMinDiv] = useState(DEFAULT_DIV);
   const [minScore, setMinScore] = useState(DEFAULT_SCORE);

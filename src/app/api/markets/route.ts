@@ -154,7 +154,7 @@ export async function GET(req: NextRequest) {
       else verifyStage = "initial";
       return { market: m, latest, opusA, gptA, synthA, verifyStage };
     })
-    .filter(({ latest, verifyStage }) => {
+    .filter(({ market, latest, verifyStage }) => {
       if (!latest) return false;
       // Mispricings additionally require a directional bet side from the MODEL, not the
       // EV-math-derived betSide. The model's verdict (stored in edgeDirection) authoritatively
@@ -165,6 +165,12 @@ export async function GET(req: NextRequest) {
       if (category === "mispricings") {
         if (latest.pass !== "obvious") return false;
         if (latest.edgeDirection === "NONE") return false;
+        // If a NEWER review (opus / synthesis / gpt) has since concluded "no clear bet", the detail
+        // page shows no edge — so don't surface the older obvious "Buy" on the card. Fixes the
+        // headline-selection mismatch where a stale mispricing call lingers on Today's Picks after
+        // the freshest analysis overrode it.
+        const freshest = market.analyses.find((x) => x.rulesHash === market.rulesHash);
+        if (freshest && freshest.pass !== "obvious" && freshest.betSide === "NONE") return false;
       }
       if (latest.edgeScore < minScore) return false;
       if (latest.divergenceScore < minDivergence) return false;

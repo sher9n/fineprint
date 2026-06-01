@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     if (!gate.ok) return NextResponse.json({ error: gate.reason }, { status: gate.status });
   }
   const body = await req.json().catch(() => ({}));
-  const limit = typeof body.limit === "number" ? Math.max(1, Math.min(2000, body.limit)) : undefined;
+  const limit = typeof body.limit === "number" ? Math.max(1, Math.min(3000, body.limit)) : undefined;
   try {
     const r = await refreshSurfacedMarketPrices({ limit });
     return NextResponse.json({ ok: true, ...r });

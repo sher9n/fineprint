@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, SlidersHorizontal, X, Check } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -94,6 +94,34 @@ export function MarketsView({ initialKind = "" as Kind }: { initialKind?: Kind }
   const [minScore, setMinScore] = useState(DEFAULT_SCORE);
   const [verify, setVerify] = useState<Verify>("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Retain the feed view (search, sort, filters) when the user opens a market and navigates back,
+  // so they don't lose their place. Persisted per browser-tab session, restored on mount; Reset (or
+  // a fresh tab/session) returns to defaults. Keyed by initialKind so distinct feeds don't collide.
+  const storageKey = `fineprint_feed_v1_${initialKind || "home"}`;
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (typeof s.q === "string") setQ(s.q);
+        if (typeof s.sort === "string") setSort(s.sort);
+        if (!initialKind && typeof s.kind === "string") setKind(s.kind);
+        if (typeof s.minDiv === "number") setMinDiv(s.minDiv);
+        if (typeof s.minScore === "number") setMinScore(s.minScore);
+        if (typeof s.verify === "string") setVerify(s.verify);
+      }
+    } catch {}
+    setRestored(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialKind]);
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify({ q, sort, kind, minDiv, minScore, verify }));
+    } catch {}
+  }, [restored, storageKey, q, sort, kind, minDiv, minScore, verify]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["picks", q, kind, minDiv, minScore, verify],

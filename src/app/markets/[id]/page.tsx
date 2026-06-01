@@ -134,14 +134,21 @@ export default function MarketDetailPage() {
       const justCompleted = next?.latestJob?.status === "completed" && prev?.latestJob?.status !== "completed";
       if (justCompleted) {
         qc.invalidateQueries({ queryKey: ["market", id] });
+        // Synthesis is written moments after the gpt_deep analysis lands; refetch again shortly so
+        // the reconciled verdict appears too, without a manual reload.
+        setTimeout(() => qc.invalidateQueries({ queryKey: ["market", id] }), 20_000);
         toast.success("Deep research finished. New evidence is in.", { duration: 6000 });
       }
       return next;
     },
     enabled: !!session?.user?.isAdmin,
+    // Keep polling even when the tab is in the background. Deep research takes 5-15 minutes and the
+    // admin usually switches away while waiting; without this, react-query pauses interval refetches
+    // for hidden tabs, so the progress banner would hang until a manual reload.
+    refetchIntervalInBackground: true,
     refetchInterval: (q) => {
       const j = (q.state.data as DeepResearchStatusResponse | undefined)?.latestJob;
-      if (j && (j.status === "queued" || j.status === "in_progress")) return 30_000;
+      if (j && (j.status === "queued" || j.status === "in_progress")) return 20_000;
       return false;
     },
   });

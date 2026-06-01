@@ -30,17 +30,25 @@ export async function refreshSurfacedMarketPrices(opts: { limit?: number; concur
   nowClosed: number;
   errors: number;
 }> {
-  const limit = opts.limit ?? 800;
+  const limit = opts.limit ?? 2500;
   // Modest concurrency + retry-with-backoff: Gamma rate-limits bursts (a concurrency-6 sweep over
   // 800 markets errored ~half), and a partial refresh leaves stale cards. 3 in flight with up to
   // two retries keeps the error rate low while still finishing in ~2 min.
   const concurrency = opts.concurrency ?? 3;
-  const markets = await prisma.market.findMany({
-    where: { active: true, closed: false, analyses: { some: { pass: { in: ["opus", "synthesis", "gpt_deep", "obvious"] } } } },
-    select: { id: true },
-    orderBy: { liquidity: "desc" },
-    take: limit,
-  });
+  // Order by the market's strongest edge (its best analysis), not raw liquidity, so the actionable
+  // "Buy" cards refresh first and a low-liquidity-but-surfaced market (e.g. a thin tennis market
+  // that has already resolved) is never stranded behind the cap with a stale "Buy" price. Tie-break
+  // on liquidity. The raw query is the clean way to ORDER BY an aggregate over the analyses.
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT m.id
+    FROM "Market" m
+    JOIN "Analysis" a ON a."marketId" = m.id AND a.pass IN ('opus', 'synthesis', 'gpt_deep', 'obvious')
+    WHERE m.active = true AND m.closed = false
+    GROUP BY m.id, m.liquidity
+    ORDER BY MAX(a."edgeScore") DESC NULLS LAST, m.liquidity DESC
+    LIMIT ${limit}
+  `;
+  const markets = rows;
   let updated = 0;
   let nowClosed = 0;
   let errors = 0;

@@ -213,9 +213,10 @@ export function scheduleDaily() {
   setInterval(fireDeepResearchPoll, 60 * 1000);
   setTimeout(fireDeepResearchPoll, 10 * 1000);
 
-  // Hourly: refresh live price + open/closed status for surfaced markets so cards don't show stale
-  // prices or already-resolved markets between the daily 05:00 ingest. Free (Gamma + DB only).
-  setInterval(fireMarketRefresh, 60 * 60 * 1000);
+  // Every 30 min: refresh live price + open/closed status for surfaced markets so cards don't show
+  // stale prices or already-resolved markets between the daily 05:00 ingest. Edge-ordered coverage
+  // (see refresh.ts) so thin-but-surfaced markets aren't stranded. Free (Gamma + DB only).
+  setInterval(fireMarketRefresh, 30 * 60 * 1000);
   setTimeout(fireMarketRefresh, 90 * 1000);
 
   // Catch up if today's scheduled run was missed (e.g., dev server restarted after 5am IST).

@@ -226,7 +226,11 @@ export default function MarketDetailPage() {
   const gptAnalysis = findCurrent("gpt_deep");
   const synthesisAnalysis = findCurrent("synthesis");
   const currentAnalyses = m.analyses.filter((x) => x.rulesHash === m.rulesHash);
-  const a = currentAnalyses[0] ?? m.analyses[0];
+  // Headline = the reconciled synthesis verdict when one exists for the current rules. A later
+  // single-lens opus/gpt re-analysis (e.g. from a daily/recovery batch) refreshes its own panel
+  // but must NOT override the synthesis as the headline recommendation, or an outlier one-model
+  // read can flip "Buy NO" to "Buy YES" just by being newer.
+  const a = synthesisAnalysis ?? currentAnalyses[0] ?? m.analyses[0];
   // When this opportunity was discovered: earliest escalated/verified pass (mirrors the feed's foundAt).
   const discoveredAt = m.analyses.reduce<string | null>(
     (min, x) =>

@@ -58,7 +58,10 @@ export function OpportunityCard(p: CardProps) {
     expectedNoPayoutCents: a.expectedNoPayoutCents,
     ruleImpliedProbability: a.ruleImpliedProbability,
   });
-  const hasBet = bet.entryCents != null && bet.evPercent != null && bet.evPercent > 0;
+  // Require a MEANINGFUL edge (matches the detail page's MIN_LIVE_EDGE), and ignore an entry at the
+  // extreme (basically resolved), so a card never says "Buy" when the detail would say "no clear
+  // bet". Below the threshold the card shows "Worth watching" instead.
+  const hasBet = bet.entryCents != null && bet.evPercent != null && bet.evPercent >= 0.03 && bet.entryCents < 98;
   const side = a.betSide === "YES" ? "YES" : a.betSide === "NO" ? "NO" : null;
   const isYes = side === "YES";
   const upside = upsidePercent(bet.entryCents);

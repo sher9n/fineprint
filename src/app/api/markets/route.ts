@@ -136,8 +136,10 @@ export async function GET(req: NextRequest) {
       if (category === "mispricings") {
         latest = obviousA;
       } else {
+        // Prefer the reconciled synthesis over a later single-lens opus/gpt re-analysis, so an
+        // outlier one-model refresh can't override the synthesis verdict as the headline.
         const currentNonObvious = m.analyses.find((x) => x.pass !== "obvious" && x.rulesHash === m.rulesHash);
-        latest = currentNonObvious ?? m.analyses[0];
+        latest = synthA ?? currentNonObvious ?? m.analyses[0];
       }
       // "Agreed" vs "disagreed" reflects the OUTCOME each model concluded (rule_implied_probability
       // vs 50%), not the price-edge. Two reviews disagree only when both clearly lean opposite ways;

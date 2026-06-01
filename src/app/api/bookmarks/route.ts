@@ -97,7 +97,9 @@ export async function GET(_req: NextRequest) {
     const obviousA = findCurrent("obvious");
     // Use the freshest current-rules analysis as the headline. Matches the detail-page logic.
     const currentAnalyses = m.analyses.filter((x) => x.rulesHash === m.rulesHash);
-    const latest = currentAnalyses[0] ?? m.analyses[0];
+    // Prefer the reconciled synthesis verdict over a later single-lens re-analysis (matches the
+    // detail page + feed headline selection).
+    const latest = synthA ?? currentAnalyses[0] ?? m.analyses[0];
 
     let verifyStage = "initial";
     if (synthA) {

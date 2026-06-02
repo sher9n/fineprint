@@ -185,7 +185,6 @@ model Vote {
 model Settings {
   id                          Int      @id @default(1)
   autoTradeEnabled            Boolean  @default(false)
-  batchModeEnabled            Boolean  @default(true)
   firstPassModel              String   @default("sonnet")
   haikuConcurrency            Int      @default(5)
   dailyBudgetUsd              Float    @default(20.0)

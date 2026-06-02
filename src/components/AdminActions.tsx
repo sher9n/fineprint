@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Zap, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { cn, fmtUsd } from "@/lib/utils";
 
 interface BudgetInfo {
@@ -11,23 +11,13 @@ interface BudgetInfo {
   remaining: number;
 }
 
-interface Settings {
-  batchModeEnabled: boolean;
-  firstPassModel: string;
-}
-
 export function AdminActions() {
   const [budget, setBudget] = useState<BudgetInfo | null>(null);
-  const [settings, setSettings] = useState<Settings | null>(null);
 
   async function load() {
     try {
-      const [b, s] = await Promise.all([
-        fetch("/api/budget").then((r) => r.json()),
-        fetch("/api/settings").then((r) => r.json()),
-      ]);
+      const b = await fetch("/api/budget").then((r) => r.json());
       setBudget({ spent: b.spent, budget: b.budget, remaining: b.remaining });
-      setSettings(s.settings);
     } catch {}
   }
 
@@ -55,12 +45,6 @@ export function AdminActions() {
           />
         </div>
       </Link>
-
-      {settings?.batchModeEnabled && (
-        <span className="chip chip-accent text-[10px]" title="Analyze submits async Anthropic batches (~50% off)">
-          <Zap className="w-2.5 h-2.5" /> batch
-        </span>
-      )}
 
       {overBudget && (
         <span className="chip text-[10px]" style={{ color: "var(--red)", borderColor: "transparent", background: "var(--red-soft)" }} title="LLM budget exhausted for today (IST)">

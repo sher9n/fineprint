@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { anthropic, HAIKU_MODEL, VERIFIER_MODEL, extractUsage, resolveFirstPassModel } from "./anthropic";
+import { anthropic, HAIKU_MODEL, VERIFIER_MODEL, extractUsage } from "./anthropic";
 import { logCost, WEB_SEARCH_COST_PER_CALL, remainingBudgetUsd } from "./budget";
 import { computeEdge } from "./scoring";
 import { AnalysisSchema, ObviousBetSchema, SYSTEM_PROMPT, OBVIOUS_SYSTEM_PROMPT, buildUserMessage, tryParseJson } from "./analyzer";
@@ -17,7 +17,6 @@ import type { Market } from "@prisma/client";
 const BATCH_DISCOUNT = 0.25;
 const VERIFIER_PURPOSE = "verifier_pass";
 export const OBVIOUS_PURPOSE = "obvious_pass";
-const FIRST_PASS_PURPOSES = new Set(["first_pass", "first_pass_haiku", "first_pass_sonnet"]);
 
 // Skip markets whose price has effectively collapsed. The "edge" is illusory in those cases
 // and either side of the trade is a near-100% loss; spending tokens on them is wasted.
@@ -144,47 +143,6 @@ Then output IN THIS ORDER:
 4. A single JSON object matching the analysis schema.
 
 Format STRICTLY: source_findings + steelman BEFORE the separator. JSON ONLY after. No commentary after the JSON.`;
-}
-
-export async function submitHaikuBatch(markets: Market[], opts: { purpose?: string; model?: string } = {}): Promise<string> {
-  if (!llmCallsEnabled()) throw new LLMDisabledError();
-  if (markets.length === 0) throw new Error("no markets to submit");
-  const client = anthropic();
-
-  let model = opts.model;
-  if (!model) {
-    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-    // Guard against silent Haiku fallback when the operator has selected an OpenAI first-pass.
-    // Anthropic batch can only run Anthropic models; scheduler should route to in-line for gpt5_4.
-    if (settings?.firstPassModel === "gpt5_4") {
-      throw new Error("submitHaikuBatch called with firstPassModel='gpt5_4'; use in-line runFirstPassAnalysis instead");
-    }
-    model = resolveFirstPassModel(settings?.firstPassModel);
-  }
-
-  const requests = markets.map((m) => ({
-    custom_id: m.id,
-    params: {
-      model: model!,
-      max_tokens: 1024,
-      system: [{ type: "text" as const, text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" as const } }],
-      messages: [{ role: "user" as const, content: buildUserMessage(m) }],
-    },
-  }));
-
-  const batch = await client.messages.batches.create({ requests });
-
-  await prisma.batchJob.create({
-    data: {
-      anthropicBatchId: batch.id,
-      status: batch.processing_status,
-      purpose: opts.purpose ?? `first_pass_${model.includes("haiku") ? "haiku" : "sonnet"}`,
-      marketIds: JSON.stringify(markets.map((m) => m.id)),
-      totalRequests: markets.length,
-    },
-  });
-
-  return batch.id;
 }
 
 // Per-market budget-gate estimate for Opus verifier with web_search. Calibrated against
@@ -556,38 +514,6 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
   return succeeded;
 }
 
-export async function pickMarketsForBatch(limit = 2000, opts: { force?: boolean; matchModel?: string } = {}): Promise<Market[]> {
-  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-  const minLiq = settings?.minLiquidityUsd ?? 5000;
-  const activeModel = opts.matchModel ?? resolveFirstPassModel(settings?.firstPassModel);
-
-  const inflightIds = await inflightMarketIds(FIRST_PASS_PURPOSES);
-
-  const markets = await prisma.market.findMany({
-    where: {
-      active: true,
-      closed: false,
-      liquidity: { gte: minLiq },
-      OR: [{ endDate: null }, { endDate: { gt: new Date() } }],
-      AND: PRICE_LIVE_FILTER,
-    },
-    include: { analyses: { where: { pass: "haiku" }, orderBy: { createdAt: "desc" }, take: 1 } },
-    orderBy: { liquidity: "desc" },
-    take: 5000,
-  });
-
-  const needed = (opts.force ? markets : markets.filter((m) => {
-    const last = m.analyses[0];
-    if (!last) return true;
-    if (last.rulesHash !== m.rulesHash) return true;
-    if (last.model !== activeModel) return true;
-    const ageH = (Date.now() - last.createdAt.getTime()) / (1000 * 60 * 60);
-    return ageH > 24;
-  })).filter((m) => !inflightIds.has(m.id));
-
-  return needed.slice(0, limit);
-}
-
 /**
  * Pick markets for a daily Opus pass, ranked by prefilter score + liquidity, bounded by the
  * liquidity floor and the per-pass cooldown.
@@ -642,6 +568,47 @@ export async function pickMarketsForPass(opts: {
     .sort((a, b) => b.pre.score - a.pre.score || b.market.liquidity - a.market.liquidity);
 
   return ranked.slice(0, limit).map((x) => x.market);
+}
+
+/**
+ * Run the daily dual-Opus passes: pick a candidate set per pass (asymmetric cooldowns) and submit
+ * the verifier + obvious batches. Shared by the 05:00 scheduler run, the admin "Analyze" / "Run
+ * daily" actions, so all three behave identically. Each submit is independent: one failure (e.g. a
+ * budget gate) does not abort the other.
+ */
+export async function submitDailyOpusPasses(opts: { limit?: number } = {}): Promise<{
+  verifierBatchId: string | null;
+  obviousBatchId: string | null;
+  verifierCount: number;
+  obviousCount: number;
+  verifierCooldownH: number;
+  obviousCooldownH: number;
+  errors: string[];
+}> {
+  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+  const limit = opts.limit ?? settings?.dailyMarketCap ?? 3200;
+  const verifierCooldownH = settings?.verifierCooldownHours ?? 144;
+  const obviousCooldownH = settings?.obviousCooldownHours ?? 48;
+
+  const verifierMarkets = await pickMarketsForPass({ pass: "opus", maxAgeHours: verifierCooldownH, limit });
+  const obviousMarkets = await pickMarketsForPass({ pass: "obvious", maxAgeHours: obviousCooldownH, limit });
+
+  const errors: string[] = [];
+  let verifierBatchId: string | null = null;
+  let obviousBatchId: string | null = null;
+  if (verifierMarkets.length > 0) {
+    try { verifierBatchId = await submitVerifierBatch(verifierMarkets); }
+    catch (e) { errors.push(`verifier: ${String(e instanceof Error ? e.message : e).slice(0, 300)}`); }
+  }
+  if (obviousMarkets.length > 0) {
+    try { obviousBatchId = await submitObviousBatch(obviousMarkets); }
+    catch (e) { errors.push(`obvious: ${String(e instanceof Error ? e.message : e).slice(0, 300)}`); }
+  }
+  return {
+    verifierBatchId, obviousBatchId,
+    verifierCount: verifierMarkets.length, obviousCount: obviousMarkets.length,
+    verifierCooldownH, obviousCooldownH, errors,
+  };
 }
 
 export async function pickMarketsForVerifierBatch(limit = 100, opts: { force?: boolean } = {}): Promise<Market[]> {

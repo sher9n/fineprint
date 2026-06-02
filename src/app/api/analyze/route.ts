@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runAnalysisPass } from "@/lib/analyzer";
 import { ensureSettings } from "@/lib/bootstrap";
-import { prisma } from "@/lib/prisma";
-import { spentTodayUsd } from "@/lib/budget";
-import { pickMarketsForBatch, submitHaikuBatch } from "@/lib/batch";
+import { submitDailyOpusPasses } from "@/lib/batch";
 import { requireAdmin } from "@/lib/admin";
 import { LLMDisabledError, llmCallsEnabled } from "@/lib/llm-gate";
 
@@ -11,6 +8,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 800;
 
+// Admin "Analyze" action: submit the two daily Opus passes (verifier + obvious) on their cooldown-
+// picked candidate sets, identical to the 05:00 scheduler run. (Previously this ran a legacy Haiku
+// first-pass; that path was retired when the opus-first pipeline took over.)
 export async function POST(req: NextRequest) {
   const gate = await requireAdmin();
   if (!gate.ok) return NextResponse.json({ error: gate.reason }, { status: gate.status });
@@ -19,49 +19,25 @@ export async function POST(req: NextRequest) {
   }
   await ensureSettings();
   const body = await req.json().catch(() => ({}));
-  const max = typeof body.max === "number" ? body.max : 2000;
-  const maxVerify = typeof body.maxVerify === "number" ? body.maxVerify : undefined;
-  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-  const useBatch = settings?.batchModeEnabled === true && body.forceSync !== true;
-
-  if (useBatch) {
-    try {
-      const markets = await pickMarketsForBatch(max);
-      if (markets.length === 0) {
-        return NextResponse.json({ ok: true, mode: "batch", submitted: 0, message: "nothing to analyze" });
-      }
-      const batchId = await submitHaikuBatch(markets);
-      return NextResponse.json({ ok: true, mode: "batch", batchId, submitted: markets.length });
-    } catch (err) {
-      if (err instanceof LLMDisabledError) {
-        return NextResponse.json({ ok: false, error: err.message }, { status: 503 });
-      }
-      return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
-    }
-  }
-
-  const spentBefore = await spentTodayUsd();
-  const run = await prisma.ingestRun.create({ data: { kind: "analyze", status: "running" } });
+  const limit = typeof body.max === "number" ? body.max : undefined;
   try {
-    const result = await runAnalysisPass({ maxMarkets: max, maxVerify });
-    const spentAfter = await spentTodayUsd();
-    await prisma.ingestRun.update({
-      where: { id: run.id },
-      data: {
-        finishedAt: new Date(),
-        status: "success",
-        marketsAnalyzed: result.haikuRun,
-        haikuCalls: result.haikuRun,
-        opusCalls: result.verifierSubmitted,
-        totalCostUsd: spentAfter - spentBefore,
+    const res = await submitDailyOpusPasses({ limit });
+    const submitted = res.verifierCount + res.obviousCount;
+    const ok = res.errors.length === 0;
+    const status = ok ? 200 : res.errors.some((e) => e.includes("budget")) ? 402 : 500;
+    return NextResponse.json(
+      {
+        ok,
+        mode: "batch",
+        submitted,
+        verifierBatchId: res.verifierBatchId,
+        obviousBatchId: res.obviousBatchId,
+        errors: res.errors,
+        ...(res.errors.length ? { error: res.errors.join("; ") } : {}),
       },
-    });
-    return NextResponse.json({ ok: true, mode: "sync", runId: run.id, ...result });
+      { status },
+    );
   } catch (err) {
-    await prisma.ingestRun.update({
-      where: { id: run.id },
-      data: { finishedAt: new Date(), status: "error", errors: String(err) },
-    });
     if (err instanceof LLMDisabledError) {
       return NextResponse.json({ ok: false, error: err.message }, { status: 503 });
     }

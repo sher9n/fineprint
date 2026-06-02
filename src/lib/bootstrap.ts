@@ -7,7 +7,6 @@ export async function ensureSettings() {
     create: {
       id: 1,
       autoTradeEnabled: false,
-      batchModeEnabled: false,
       haikuConcurrency: 5,
       dailyBudgetUsd: parseFloat(process.env.DAILY_LLM_BUDGET_USD ?? "20"),
       minDivergenceScore: 6,

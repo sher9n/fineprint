@@ -4,14 +4,13 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Save, Undo2, Zap, Layers, Filter, Sparkles } from "lucide-react";
+import { Save, Undo2, Zap, Filter, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { NumberField } from "@/components/NumberField";
 import { cn } from "@/lib/utils";
 
 interface Settings {
   autoTradeEnabled: boolean;
-  batchModeEnabled: boolean;
   firstPassModel: string;
   haikuConcurrency: number;
   dailyBudgetUsd: number;
@@ -101,14 +100,6 @@ export default function PipelineSettingsPage() {
             <button onClick={() => saveToggle({ firstPassModel: "haiku" })} className={cn("px-3 py-1.5 rounded-md text-xs font-medium", settings.firstPassModel === "haiku" ? "bg-[var(--bg-elev)] shadow-sm" : "text-[var(--text-muted)]")}>Haiku 4.5</button>
             <button onClick={() => saveToggle({ firstPassModel: "sonnet" })} className={cn("px-3 py-1.5 rounded-md text-xs font-medium", settings.firstPassModel === "sonnet" ? "bg-[var(--bg-elev)] text-[var(--purple)] shadow-sm" : "text-[var(--text-muted)]")}>Sonnet 4.6</button>
           </div>
-        </ToggleCard>
-
-        <ToggleCard
-          icon={Layers}
-          title="Batch API mode"
-          description="When on, Analyze and Run daily submit async batches (~50% cheaper, up to 24h turnaround)."
-        >
-          <Switch value={settings.batchModeEnabled} onChange={(v) => saveToggle({ batchModeEnabled: v })} />
         </ToggleCard>
 
         <ToggleCard

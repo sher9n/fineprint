@@ -2,7 +2,6 @@ import { z } from "zod";
 import { prisma } from "./prisma";
 import { anthropic, HAIKU_MODEL, VERIFIER_MODEL, extractUsage, withRetry, resolveFirstPassModel } from "./anthropic";
 import { logCost, remainingBudgetUsd, WEB_SEARCH_COST_PER_CALL } from "./budget";
-import { prefilter } from "./prefilter";
 import { computeEdge } from "./scoring";
 import { llmCallsEnabled, LLMDisabledError } from "./llm-gate";
 import type { Market } from "@prisma/client";
@@ -626,76 +625,3 @@ export async function analyzeAndStore(market: Market, pass: "haiku" | "opus") {
   });
 }
 
-export async function runAnalysisPass(opts: { maxMarkets?: number; maxVerify?: number } = {}) {
-  // Bail out cleanly when LLM is disabled rather than letting every per-market worker throw
-  // and spam the log. The caller can convert this to a clean HTTP 503.
-  if (!llmCallsEnabled()) throw new LLMDisabledError();
-  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-  const minLiq = settings?.minLiquidityUsd ?? 5000;
-  const concurrency = Math.max(1, Math.min(10, settings?.haikuConcurrency ?? 5));
-  const max = opts.maxMarkets ?? 2000;
-
-  const markets = await prisma.market.findMany({
-    where: {
-      active: true,
-      closed: false,
-      liquidity: { gte: minLiq },
-      OR: [{ endDate: null }, { endDate: { gt: new Date() } }],
-    },
-    include: { analyses: { where: { pass: "haiku" }, orderBy: { createdAt: "desc" }, take: 1 } },
-    orderBy: { liquidity: "desc" },
-    take: 5000,
-  });
-
-  const candidates = markets
-    .map((m) => ({ market: m, pre: prefilter(m) }))
-    .filter((c) => {
-      const last = c.market.analyses[0];
-      if (!last) return true;
-      if (last.rulesHash !== c.market.rulesHash) return true;
-      const ageH = (Date.now() - last.createdAt.getTime()) / (1000 * 60 * 60);
-      return ageH > 24;
-    })
-    .sort((a, b) => {
-      const scoreDiff = b.pre.score - a.pre.score;
-      if (scoreDiff !== 0) return scoreDiff;
-      return b.market.liquidity - a.market.liquidity;
-    })
-    .slice(0, max);
-
-  let haikuRun = 0;
-  let budgetExhausted = false;
-
-  const queue = [...candidates];
-  async function worker() {
-    while (queue.length > 0 && !budgetExhausted) {
-      const c = queue.shift();
-      if (!c) break;
-      const remaining = await remainingBudgetUsd();
-      if (remaining < 0.05) {
-        budgetExhausted = true;
-        break;
-      }
-      try {
-        const a = await analyzeAndStore(c.market, "haiku");
-        if (a) haikuRun++;
-      } catch (err) {
-        console.error(`[haiku] market ${c.market.id} failed:`, String(err).slice(0, 200));
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
-
-  const { pickMarketsForVerifierBatch, submitVerifierBatch } = await import("./batch");
-  const verifyMarkets = await pickMarketsForVerifierBatch(opts.maxVerify ?? 50);
-  let verifierBatchId: string | null = null;
-  if (verifyMarkets.length > 0) {
-    try {
-      verifierBatchId = await submitVerifierBatch(verifyMarkets);
-    } catch (err) {
-      console.error(`[verifier batch submit] failed:`, String(err).slice(0, 200));
-    }
-  }
-
-  return { candidates: candidates.length, haikuRun, verifierSubmitted: verifyMarkets.length, verifierBatchId };
-}

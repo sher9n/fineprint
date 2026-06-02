@@ -6,18 +6,22 @@ Polymarket resolution-rule auditor. Surfaces markets where the **literal rules d
 
 # Architecture
 
-**Four-pass LLM pipeline** (each market can be at any of these stages):
+**Live daily pipeline**: a dual Opus batch at 05:00 IST, plus a manual deep-research lane.
 
 | Pass | Model | Trigger | Cost / call |
 |---|---|---|---|
-| `haiku` / `sonnet` first-pass | Claude Haiku 4.5 or Sonnet 4.6 (configurable) | Daily batch at 05:00 IST | ~$0.005 |
-| `opus` verifier | Claude Opus 4.8 + web search | Auto-escalated when first-pass divergence >= 5 AND edge >= 20 | ~$0.50-1 |
+| `opus` verifier (Opportunities) | Claude Opus 4.8 + web search + pgvector sibling context | Daily 05:00 IST batch, re-scanned on a LONG cooldown (`verifierCooldownHours`, default 144h); a `rulesHash` change forces an immediate re-scan | ~$0.02-0.08 |
+| `obvious` mispricings | Claude Opus 4.8 + web search (no sibling context) | Daily 05:00 IST batch, re-scanned on a SHORT cooldown (`obviousCooldownHours`, default 48h) | ~$0.015 |
 | `gpt_deep` deep research | OpenAI `o3-deep-research` (env `OPENAI_DEEP_RESEARCH_MODEL`) | **Manual only**, admin button per market | ~$1-2 |
 | `synthesis` | Claude Opus 4.8 | Auto after `gpt_deep` completes | ~$0.35 |
 
-**Deep research is strictly manual** by user policy. Never auto-trigger it across many markets — it's expensive ($1-2 each) and the user wants explicit consent per call.
+Each daily pass picks its OWN candidate set via `pickMarketsForPass` (keyed on that pass's own latest analysis + cooldown), among open markets with `liquidity >= Settings.minLiquidityUsd` (currently $5K), ranked by prefilter score, capped at `Settings.dailyMarketCap` (default 3200) per pass. The cooldown asymmetry is the cost lever: rules are stable so the expensive verifier re-scans slowly, world-state moves so the cheap obvious pass re-scans fast, and freed budget flows to never-scanned lower-liquidity markets instead of re-deriving stable verdicts. These four knobs (`minLiquidityUsd`, `dailyMarketCap`, `verifierCooldownHours`, `obviousCooldownHours`) are live-tunable from the admin Pipeline settings page / `PATCH /api/settings`, no deploy needed.
 
-**Scheduler** runs daily ingest + first-pass batch + verifier batch at 05:00 IST. Reconciliation against Polymarket Gamma runs each ingest to catch markets that have closed since last sync. Daily run also embeds any newly-ingested markets via `embedPendingMarkets()`.
+**Legacy, mostly dormant**: an older `haiku`/`sonnet` first-pass (`pickMarketsForBatch` + `submitHaikuBatch`) that auto-escalated to the Opus verifier when divergence >= 5 AND edge >= 20 (`pickMarketsForVerifierBatch`). It is gated by `Settings.batchModeEnabled` and now only fires from the manual `/api/analyze` button or the (uncalled) `/api/cron/run`. The opus-first daily pipeline superseded it on 2026-05-29 and no haiku first-pass has run since. `fireBatchPoll` (every 5 min) still ingests in-flight daily batches unconditionally, but its `batchModeEnabled`-gated verifier-escalation *submit* is dead unless fresh haiku analyses reappear (e.g. someone clicks Analyze), which would redundantly re-escalate markets the daily pipeline already covers.
+
+**Deep research is strictly manual** by user policy. Never auto-trigger it across many markets, it is expensive ($1-2 each) and the user wants explicit consent per call.
+
+**Scheduler** (`src/lib/scheduler.ts`) runs the daily ingest + dual Opus batch at 05:00 IST, ingests in-flight batches every 5 min, polls deep-research every 60s, and refreshes surfaced-market prices every 30 min. Reconciliation against Polymarket Gamma runs each ingest to catch markets that have closed since last sync. Daily run also embeds any newly-ingested markets via `embedPendingMarkets()`.
 
 # Asymmetric specialization: GPT vs Opus
 
@@ -81,7 +85,7 @@ If you (Claude) need to trigger an LLM call for testing locally, flip the env te
 # Where things live
 
 - `src/lib/analyzer.ts` — Haiku/Sonnet first-pass, Opus verifier, `runAnalysisPass`, schema (Zod). Holds the big shared `SYSTEM_PROMPT` (resolver-precedent guidance, exclusion-clauses, etc.).
-- `src/lib/batch.ts` — Anthropic batch submitters + pollers. `pickMarketsForBatch`, `pickMarketsForVerifierBatch`. `buildMarketContext` here injects sibling-market context for verifier prompts via pgvector similarity.
+- `src/lib/batch.ts` — Anthropic batch submitters + pollers. `pickMarketsForPass({ pass, maxAgeHours, limit, minLiquidity })` is the live daily picker (one call per pass, asymmetric cooldowns; see Architecture). `pickMarketsForBatch` / `pickMarketsForVerifierBatch` are the legacy haiku-first / escalation pickers (dormant). `buildMarketContext` here injects sibling-market context for verifier prompts via pgvector similarity.
 - `src/lib/deep-research.ts` — OpenAI Responses API in background mode (we tried batch but the project doesn't have batch model access for `o3-deep-research`; see `inspect-batch.ts`). Holds `GPT_FACT_FINDER_SYSTEM_PROMPT` — deliberately market-blind, forbidden-domains list. `submitDeepResearch` accepts `{ force: true }` for admin re-runs.
 - `src/lib/synthesis.ts` — combines latest opus + gpt_deep into a final verdict. Synthesis prompt has explicit FACTUAL-vs-STRUCTURAL disagreement classification and EXCLUSION-CLAUSE-CHECK rules.
 - `src/lib/embeddings.ts` — local sentence-transformer (`Xenova/all-MiniLM-L6-v2`), `embedPendingMarkets()`, `findSimilarClosedMarkets()`. The similarity query is a two-step (raw SQL for ids by cosine distance, then Prisma findMany for rows) because `SELECT *` over the pgvector column trips a Prisma deserialize error.

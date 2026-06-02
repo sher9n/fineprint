@@ -3,6 +3,7 @@ import { pickMarketsForOpusFirstPass, submitVerifierBatch, submitObviousBatch } 
 import { ensureSettings } from "@/lib/bootstrap";
 import { requireAdmin } from "@/lib/admin";
 import { LLMDisabledError, llmCallsEnabled } from "@/lib/llm-gate";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,14 +41,28 @@ export async function POST(req: NextRequest) {
   await ensureSettings();
   const body = await req.json().catch(() => ({}));
   const limit = typeof body.limit === "number" ? Math.max(1, Math.min(2000, body.limit)) : 2000;
+  // Optional explicit target set. pickMarketsForOpusFirstPass keys on opus-staleness, so it can't
+  // reach markets that have a current opus but a stale/missing obvious analysis (the asymmetric tail
+  // a credit-interrupted run leaves when its two batches error at slightly different points). Passing
+  // {"marketIds":[...]} runs the requested passes on exactly those markets instead.
+  const marketIds: string[] | null =
+    Array.isArray(body.marketIds) && body.marketIds.length
+      ? body.marketIds.filter((x: unknown): x is string => typeof x === "string").slice(0, 2000)
+      : null;
   const passes: ("verifier" | "obvious")[] =
     Array.isArray(body.passes) && body.passes.length
       ? body.passes.filter((p: unknown): p is "verifier" | "obvious" => p === "verifier" || p === "obvious")
       : ["verifier", "obvious"];
   try {
-    const markets = await pickMarketsForOpusFirstPass(limit);
+    const markets = marketIds
+      ? await prisma.market.findMany({ where: { id: { in: marketIds } } })
+      : await pickMarketsForOpusFirstPass(limit);
     if (markets.length === 0) {
-      return NextResponse.json({ ok: true, submitted: 0, message: "no markets eligible (none lack a current opus analysis)" });
+      return NextResponse.json({
+        ok: true,
+        submitted: 0,
+        message: marketIds ? "none of the given marketIds matched a market" : "no markets eligible (none lack a current opus analysis)",
+      });
     }
     // Submit each requested pass independently so one failure (e.g. a budget gate) doesn't abort the
     // other, mirroring fireDailyRun's per-batch error handling.

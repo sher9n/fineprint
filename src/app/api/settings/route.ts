@@ -59,6 +59,18 @@ export async function PATCH(req: NextRequest) {
     if (!isFiniteNum(body.maxDaysToEnd)) return NextResponse.json({ error: "maxDaysToEnd must be a number" }, { status: 400 });
     data.maxDaysToEnd = clamp(Math.floor(body.maxDaysToEnd), 0, 3650);
   }
+  if ("dailyMarketCap" in body) {
+    if (!isFiniteNum(body.dailyMarketCap)) return NextResponse.json({ error: "dailyMarketCap must be a number" }, { status: 400 });
+    data.dailyMarketCap = clamp(Math.floor(body.dailyMarketCap), 1, 10000);
+  }
+  if ("verifierCooldownHours" in body) {
+    if (!isFiniteNum(body.verifierCooldownHours)) return NextResponse.json({ error: "verifierCooldownHours must be a number" }, { status: 400 });
+    data.verifierCooldownHours = clamp(Math.floor(body.verifierCooldownHours), 1, 720);
+  }
+  if ("obviousCooldownHours" in body) {
+    if (!isFiniteNum(body.obviousCooldownHours)) return NextResponse.json({ error: "obviousCooldownHours must be a number" }, { status: 400 });
+    data.obviousCooldownHours = clamp(Math.floor(body.obviousCooldownHours), 1, 720);
+  }
 
   if (isFiniteNum(data.minDaysToEnd) && isFiniteNum(data.maxDaysToEnd) && (data.minDaysToEnd as number) > (data.maxDaysToEnd as number)) {
     return NextResponse.json({ error: "minDaysToEnd must be <= maxDaysToEnd" }, { status: 400 });

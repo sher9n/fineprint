@@ -193,6 +193,9 @@ model Settings {
   minLiquidityUsd             Float    @default(5000)
   minDaysToEnd                Int      @default(2)
   maxDaysToEnd                Int      @default(120)
+  dailyMarketCap              Int      @default(3200)
+  verifierCooldownHours       Int      @default(144)
+  obviousCooldownHours        Int      @default(48)
   deepResearchAutoEnabled     Boolean  @default(true)
   dailyDeepResearchBudgetUsd  Float    @default(50.0)
   updatedAt                   DateTime @updatedAt

@@ -589,17 +589,29 @@ export async function pickMarketsForBatch(limit = 2000, opts: { force?: boolean;
 }
 
 /**
- * Pick markets for the Opus + web_search "first-pass" (Scenario A). Unlike pickMarketsForBatch
- * (Sonnet-style triage) and pickMarketsForVerifierBatch (escalation-based), this picks ALL
- * eligible markets ranked by prefilter score + liquidity. We rely on the prefilter and liquidity
- * floor to bound volume — there's no separate first-pass to gate against.
+ * Pick markets for a daily Opus pass, ranked by prefilter score + liquidity, bounded by the
+ * liquidity floor and the per-pass cooldown.
  *
- * Recency check looks for any Opus analysis matching the current rulesHash within 24h.
+ * Per-pass cooldown is the cost lever: the two daily passes are NOT symmetric in how fast they
+ * go stale, so they get different `maxAgeHours`.
+ *   - pass="opus" (verifier / rule-divergence): rules are stable, so a long cooldown (days) is
+ *     safe; a rulesHash change still forces an immediate re-scan regardless of age.
+ *   - pass="obvious" (world-state / mispricing): facts move with the news, so a short cooldown.
+ * Each pass keys its recency check on its OWN latest analysis (pass="opus" vs pass="obvious") and
+ * its own in-flight purpose, so the cheap obvious pass and the expensive verifier pass advance
+ * independently instead of sharing one candidate set.
  */
-export async function pickMarketsForOpusFirstPass(limit = 2000): Promise<Market[]> {
+export async function pickMarketsForPass(opts: {
+  pass: "opus" | "obvious";
+  maxAgeHours: number;
+  limit: number;
+  minLiquidity?: number;
+}): Promise<Market[]> {
+  const { pass, maxAgeHours, limit } = opts;
   const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-  const minLiq = settings?.minLiquidityUsd ?? 10000;
-  const inflightIds = await inflightMarketIds(new Set([VERIFIER_PURPOSE]));
+  const minLiq = opts.minLiquidity ?? settings?.minLiquidityUsd ?? 5000;
+  const purpose = pass === "opus" ? VERIFIER_PURPOSE : OBVIOUS_PURPOSE;
+  const inflightIds = await inflightMarketIds(new Set([purpose]));
 
   const { prefilter } = await import("./prefilter");
 
@@ -611,7 +623,7 @@ export async function pickMarketsForOpusFirstPass(limit = 2000): Promise<Market[
       OR: [{ endDate: null }, { endDate: { gt: new Date() } }],
       AND: PRICE_LIVE_FILTER,
     },
-    include: { analyses: { where: { pass: "opus" }, orderBy: { createdAt: "desc" }, take: 1 } },
+    include: { analyses: { where: { pass }, orderBy: { createdAt: "desc" }, take: 1 } },
     orderBy: { liquidity: "desc" },
     take: 10000,
   });
@@ -623,7 +635,7 @@ export async function pickMarketsForOpusFirstPass(limit = 2000): Promise<Market[
       if (!last) return true;
       if (last.rulesHash !== m.rulesHash) return true;
       const ageH = (Date.now() - last.createdAt.getTime()) / (1000 * 60 * 60);
-      return ageH > 24;
+      return ageH > maxAgeHours;
     })
     .map((m) => ({ market: m, pre: prefilter(m) }))
     .filter((x) => x.pre.pass)

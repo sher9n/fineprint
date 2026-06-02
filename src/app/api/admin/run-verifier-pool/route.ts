@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pickMarketsForOpusFirstPass, submitVerifierBatch, submitObviousBatch } from "@/lib/batch";
+import { pickMarketsForPass, submitVerifierBatch, submitObviousBatch } from "@/lib/batch";
 import { ensureSettings } from "@/lib/bootstrap";
 import { requireAdmin } from "@/lib/admin";
 import { LLMDisabledError, llmCallsEnabled } from "@/lib/llm-gate";
@@ -17,10 +17,11 @@ export const maxDuration = 800;
  * at volume, which is why local recovery kept dropping its connection; this endpoint does the same
  * work inside the prod container where the DB is local and fast.
  *
- * Runs BOTH passes by default (verifier/opus + obvious/world-state) on the same picked set, mirroring
- * fireDailyRun, so a credit-interrupted daily run can be fully recovered: pickMarketsForOpusFirstPass
- * selects the markets still lacking a current opus analysis (the errored tail), and both passes re-run
- * on them in one shot. Pass {"passes":["verifier"]} to scope to a single pass.
+ * Runs BOTH passes by default (verifier/opus + obvious/world-state), mirroring fireDailyRun: each
+ * pass picks its OWN candidate set via pickMarketsForPass on its own cooldown (verifier long, obvious
+ * short), selecting markets that lack a current analysis for that pass (the errored tail of a
+ * credit-interrupted run is exactly that). Pass {"passes":["verifier"]} to scope to a single pass, or
+ * {"marketIds":[...]} to run the requested passes on an exact set (bypasses the cooldown picker).
  *
  * Auth: either an admin session (UI), OR a CRON_SECRET header (so it can be curl'd / scheduled
  * without a browser session). The budget gate inside each submitter still caps spend.
@@ -39,47 +40,51 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: new LLMDisabledError().message }, { status: 503 });
   }
   await ensureSettings();
+  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
   const body = await req.json().catch(() => ({}));
-  const limit = typeof body.limit === "number" ? Math.max(1, Math.min(2000, body.limit)) : 2000;
-  // Optional explicit target set. pickMarketsForOpusFirstPass keys on opus-staleness, so it can't
-  // reach markets that have a current opus but a stale/missing obvious analysis (the asymmetric tail
-  // a credit-interrupted run leaves when its two batches error at slightly different points). Passing
-  // {"marketIds":[...]} runs the requested passes on exactly those markets instead.
+  const cap = settings?.dailyMarketCap ?? 3200;
+  const limit = typeof body.limit === "number" ? Math.max(1, Math.min(5000, body.limit)) : cap;
+  // Optional explicit target set. Passing {"marketIds":[...]} runs the requested passes on exactly
+  // those markets (bypassing the cooldown picker) -- e.g. to fill a known per-pass gap.
   const marketIds: string[] | null =
     Array.isArray(body.marketIds) && body.marketIds.length
-      ? body.marketIds.filter((x: unknown): x is string => typeof x === "string").slice(0, 2000)
+      ? body.marketIds.filter((x: unknown): x is string => typeof x === "string").slice(0, 5000)
       : null;
   const passes: ("verifier" | "obvious")[] =
     Array.isArray(body.passes) && body.passes.length
       ? body.passes.filter((p: unknown): p is "verifier" | "obvious" => p === "verifier" || p === "obvious")
       : ["verifier", "obvious"];
   try {
-    const markets = marketIds
-      ? await prisma.market.findMany({ where: { id: { in: marketIds } } })
-      : await pickMarketsForOpusFirstPass(limit);
-    if (markets.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        submitted: 0,
-        message: marketIds ? "none of the given marketIds matched a market" : "no markets eligible (none lack a current opus analysis)",
-      });
+    const explicit = marketIds ? await prisma.market.findMany({ where: { id: { in: marketIds } } }) : null;
+    if (explicit && explicit.length === 0) {
+      return NextResponse.json({ ok: true, verifierCount: 0, obviousCount: 0, message: "none of the given marketIds matched a market" });
     }
-    // Submit each requested pass independently so one failure (e.g. a budget gate) doesn't abort the
-    // other, mirroring fireDailyRun's per-batch error handling.
+    // Each requested pass picks its own set (or uses the explicit set) and submits independently so
+    // one failure (e.g. a budget gate) doesn't abort the other, mirroring fireDailyRun.
     const errors: string[] = [];
     let verifierBatchId: string | undefined;
     let obviousBatchId: string | undefined;
+    let verifierCount = 0;
+    let obviousCount = 0;
     if (passes.includes("verifier")) {
-      try { verifierBatchId = await submitVerifierBatch(markets); }
-      catch (e) { errors.push(`verifier: ${String(e instanceof Error ? e.message : e)}`); }
+      const set = explicit ?? await pickMarketsForPass({ pass: "opus", maxAgeHours: settings?.verifierCooldownHours ?? 144, limit });
+      verifierCount = set.length;
+      if (set.length > 0) {
+        try { verifierBatchId = await submitVerifierBatch(set); }
+        catch (e) { errors.push(`verifier: ${String(e instanceof Error ? e.message : e)}`); }
+      }
     }
     if (passes.includes("obvious")) {
-      try { obviousBatchId = await submitObviousBatch(markets); }
-      catch (e) { errors.push(`obvious: ${String(e instanceof Error ? e.message : e)}`); }
+      const set = explicit ?? await pickMarketsForPass({ pass: "obvious", maxAgeHours: settings?.obviousCooldownHours ?? 48, limit });
+      obviousCount = set.length;
+      if (set.length > 0) {
+        try { obviousBatchId = await submitObviousBatch(set); }
+        catch (e) { errors.push(`obvious: ${String(e instanceof Error ? e.message : e)}`); }
+      }
     }
     const ok = errors.length === 0;
     const status = ok ? 200 : errors.some((e) => e.includes("budget")) ? 402 : 500;
-    return NextResponse.json({ ok, submitted: markets.length, passes, verifierBatchId, obviousBatchId, errors }, { status });
+    return NextResponse.json({ ok, verifierCount, obviousCount, passes, verifierBatchId, obviousBatchId, errors }, { status });
   } catch (err) {
     if (err instanceof LLMDisabledError) {
       return NextResponse.json({ ok: false, error: err.message }, { status: 503 });

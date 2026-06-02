@@ -8,11 +8,11 @@
  */
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
-import { pickMarketsForOpusFirstPass, submitObviousBatch } from "../src/lib/batch";
+import { pickMarketsForPass, submitObviousBatch } from "../src/lib/batch";
 
 async function main() {
   console.log("[mispricings-test] picking 30 eligible markets...");
-  const markets = await pickMarketsForOpusFirstPass(30);
+  const markets = await pickMarketsForPass({ pass: "obvious", maxAgeHours: 48, limit: 30 });
   console.log(`[mispricings-test] picked ${markets.length} markets`);
   if (markets.length === 0) {
     console.log("[mispricings-test] no markets; bailing");

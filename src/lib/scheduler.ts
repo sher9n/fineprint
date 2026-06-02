@@ -29,11 +29,15 @@ async function fireDailyRun() {
   dailyRunning = true;
   try {
     const { runIngest } = await import("@/lib/ingest");
-    const { submitVerifierBatch, submitObviousBatch, pickMarketsForOpusFirstPass } = await import("@/lib/batch");
+    const { submitVerifierBatch, submitObviousBatch, pickMarketsForPass } = await import("@/lib/batch");
     const { ensureSettings } = await import("@/lib/bootstrap");
     const { embedPendingMarkets } = await import("@/lib/embeddings");
     const { prisma } = await import("@/lib/prisma");
     await ensureSettings();
+    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+    const cap = settings?.dailyMarketCap ?? 3200;
+    const verifierCooldownH = settings?.verifierCooldownHours ?? 144;
+    const obviousCooldownH = settings?.obviousCooldownHours ?? 48;
     const run = await prisma.ingestRun.create({ data: { kind: "scheduled", status: "running" } });
     try {
       const ing = await runIngest();
@@ -46,37 +50,45 @@ async function fireDailyRun() {
       } catch (e) {
         console.error(`[scheduler] embedPendingMarkets failed:`, String(e).slice(0, 200));
       }
-      // Daily dual-batch pipeline:
+      // Daily dual-batch pipeline (asymmetric cooldowns):
       //   1. VERIFIER (fineprint) — Opus 4.8 + ws + sibling context, asks "do the rules diverge
-      //      from the lay reading in a way casual bettors miss?"
+      //      from the lay reading in a way casual bettors miss?" Rules are stable, so it re-scans
+      //      on a LONG cooldown (verifierCooldownHours, ~6d); a rulesHash change forces re-scan.
       //   2. OBVIOUS (mispricings) — Opus 4.8 + ws, no sibling context, asks "does world state
-      //      already determine the outcome in a way the price doesn't reflect?"
-      // Both batches run on the SAME 2000-market candidate pool. Combined cost ~$52/day, with
-      // separate ingestion (verifier → pass='opus', obvious → pass='obvious') so the UI can
-      // surface them as Opportunities vs Mispricings tabs. Calibrated 2026-05-29.
-      const markets = await pickMarketsForOpusFirstPass(2000);
+      //      already determine the outcome in a way the price doesn't reflect?" World-state moves,
+      //      so it re-scans on a SHORT cooldown (obviousCooldownHours, ~2d).
+      // Each pass picks its own candidate set (keyed on its own latest analysis), so the expensive
+      // verifier isn't burned re-deriving stable verdicts. Freed budget flows to never-scanned
+      // lower-liquidity markets. Separate ingestion (verifier → pass='opus', obvious → pass='obvious')
+      // so the UI can surface them as Opportunities vs Mispricings tabs. Recalibrated 2026-06-02.
+      const verifierMarkets = await pickMarketsForPass({ pass: "opus", maxAgeHours: verifierCooldownH, limit: cap });
+      const obviousMarkets = await pickMarketsForPass({ pass: "obvious", maxAgeHours: obviousCooldownH, limit: cap });
       let verifierBatchId: string | null = null;
       let obviousBatchId: string | null = null;
       const submitErrors: string[] = [];
-      if (markets.length > 0) {
+      if (verifierMarkets.length > 0) {
         try {
-          verifierBatchId = await submitVerifierBatch(markets);
-          console.log(`[scheduler] verifier (fineprint) batch ${verifierBatchId} submitted (${markets.length} markets)`);
+          verifierBatchId = await submitVerifierBatch(verifierMarkets);
+          console.log(`[scheduler] verifier (fineprint) batch ${verifierBatchId} submitted (${verifierMarkets.length} markets, cooldown ${verifierCooldownH}h)`);
         } catch (e) {
           const msg = String(e instanceof Error ? e.message : e).slice(0, 300);
           submitErrors.push(`verifier: ${msg}`);
           console.error(`[scheduler] verifier batch submit failed:`, msg);
         }
+      } else {
+        console.log(`[scheduler] verifier: no markets due (cooldown ${verifierCooldownH}h)`);
+      }
+      if (obviousMarkets.length > 0) {
         try {
-          obviousBatchId = await submitObviousBatch(markets);
-          console.log(`[scheduler] obvious (mispricings) batch ${obviousBatchId} submitted (${markets.length} markets)`);
+          obviousBatchId = await submitObviousBatch(obviousMarkets);
+          console.log(`[scheduler] obvious (mispricings) batch ${obviousBatchId} submitted (${obviousMarkets.length} markets, cooldown ${obviousCooldownH}h)`);
         } catch (e) {
           const msg = String(e instanceof Error ? e.message : e).slice(0, 300);
           submitErrors.push(`obvious: ${msg}`);
           console.error(`[scheduler] obvious batch submit failed:`, msg);
         }
       } else {
-        console.log(`[scheduler] no markets to analyze; skipping batch submission`);
+        console.log(`[scheduler] obvious: no markets due (cooldown ${obviousCooldownH}h)`);
       }
       await prisma.ingestRun.update({
         where: { id: run.id },
@@ -88,8 +100,8 @@ async function fireDailyRun() {
           errors: submitErrors.length > 0 ? submitErrors.join(" | ") : null,
           marketsAdded: ing.added,
           marketsUpdated: ing.updated,
-          marketsAnalyzed: markets.length,
-          opusCalls: markets.length,
+          marketsAnalyzed: verifierMarkets.length + obviousMarkets.length,
+          opusCalls: verifierMarkets.length + obviousMarkets.length,
         },
       });
       console.log("[scheduler] daily run done");

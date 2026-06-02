@@ -19,10 +19,13 @@ interface Settings {
   minLiquidityUsd: number;
   minDaysToEnd: number;
   maxDaysToEnd: number;
+  dailyMarketCap: number;
+  verifierCooldownHours: number;
+  obviousCooldownHours: number;
 }
 
-type DraftKey = "haikuConcurrency" | "dailyBudgetUsd" | "minDivergenceScore" | "minLiquidityUsd" | "minDaysToEnd" | "maxDaysToEnd";
-const DRAFT_KEYS: DraftKey[] = ["haikuConcurrency", "dailyBudgetUsd", "minDivergenceScore", "minLiquidityUsd", "minDaysToEnd", "maxDaysToEnd"];
+type DraftKey = "haikuConcurrency" | "dailyBudgetUsd" | "minDivergenceScore" | "minLiquidityUsd" | "minDaysToEnd" | "maxDaysToEnd" | "dailyMarketCap" | "verifierCooldownHours" | "obviousCooldownHours";
+const DRAFT_KEYS: DraftKey[] = ["haikuConcurrency", "dailyBudgetUsd", "minDivergenceScore", "minLiquidityUsd", "minDaysToEnd", "maxDaysToEnd", "dailyMarketCap", "verifierCooldownHours", "obviousCooldownHours"];
 
 export default function PipelineSettingsPage() {
   const { data: session } = useSession();
@@ -141,6 +144,15 @@ export default function PipelineSettingsPage() {
             </Field>
             <Field label="Max days to resolution" dirty={isDirty("maxDaysToEnd")}>
               <NumberField value={value("maxDaysToEnd")} onChange={(v) => setDraft((d) => ({ ...d, maxDaysToEnd: v }))} className={cn(isDirty("maxDaysToEnd") && "border-[var(--accent)]")} />
+            </Field>
+            <Field label="Daily market cap (per pass)" dirty={isDirty("dailyMarketCap")}>
+              <NumberField value={value("dailyMarketCap")} step="100" onChange={(v) => setDraft((d) => ({ ...d, dailyMarketCap: v }))} className={cn(isDirty("dailyMarketCap") && "border-[var(--accent)]")} />
+            </Field>
+            <Field label="Verifier cooldown (hours)" dirty={isDirty("verifierCooldownHours")}>
+              <NumberField value={value("verifierCooldownHours")} step="12" onChange={(v) => setDraft((d) => ({ ...d, verifierCooldownHours: v }))} className={cn(isDirty("verifierCooldownHours") && "border-[var(--accent)]")} />
+            </Field>
+            <Field label="Obvious cooldown (hours)" dirty={isDirty("obviousCooldownHours")}>
+              <NumberField value={value("obviousCooldownHours")} step="12" onChange={(v) => setDraft((d) => ({ ...d, obviousCooldownHours: v }))} className={cn(isDirty("obviousCooldownHours") && "border-[var(--accent)]")} />
             </Field>
           </div>
         </div>

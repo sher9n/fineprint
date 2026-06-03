@@ -16,9 +16,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     prisma.market.findUnique({
       where: { id },
       include: {
-        // Exclude experiment-only passes (e.g. sonnet_exp model A/B) so they never become the
-        // detail page's "latest" / primary analysis. They live in their own pass for offline compare.
-        analyses: { where: { pass: { not: "sonnet_exp" } }, orderBy: { createdAt: "desc" }, take: 20 },
+        analyses: { orderBy: { createdAt: "desc" }, take: 20 },
       },
     }),
     userId ? prisma.bookmark.findUnique({ where: { userId_marketId: { userId, marketId: id } } }) : Promise.resolve(null),

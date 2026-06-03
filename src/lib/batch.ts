@@ -17,11 +17,6 @@ import type { Market } from "@prisma/client";
 const BATCH_DISCOUNT = 0.25;
 const VERIFIER_PURPOSE = "verifier_pass";
 export const OBVIOUS_PURPOSE = "obvious_pass";
-// Model A/B experiment lane: the SAME verifier pipe (prompt + web_search + pgvector siblings) on a
-// different model, ingested under pass='sonnet_exp' which NO production query surfaces (feed,
-// cooldown pickers, detail page all filter to opus/obvious/synthesis/gpt_deep/haiku). Lets us run a
-// head-to-head against the real opus pass without touching live state.
-export const VERIFIER_EXP_PURPOSE = "verifier_sonnet_exp";
 
 // Skip markets whose price has effectively collapsed. The "edge" is illusory in those cases
 // and either side of the trade is a near-100% loss; spending tokens on them is wasted.
@@ -157,7 +152,7 @@ Format STRICTLY: source_findings + steelman BEFORE the separator. JSON ONLY afte
 // safety margin over CostLog estimates which tend to under-predict by 5-10%.
 const VERIFIER_COST_ESTIMATE_PER_MARKET = 0.03;
 
-export async function submitVerifierBatch(markets: Market[], opts: { purpose?: string; model?: string } = {}): Promise<string> {
+export async function submitVerifierBatch(markets: Market[], opts: { purpose?: string } = {}): Promise<string> {
   if (!llmCallsEnabled()) throw new LLMDisabledError();
   if (markets.length === 0) throw new Error("no markets to submit");
   const remaining = await remainingBudgetUsd();
@@ -166,7 +161,7 @@ export async function submitVerifierBatch(markets: Market[], opts: { purpose?: s
     throw new Error(`budget gate: $${remaining.toFixed(2)} remaining < $${estimated.toFixed(2)} estimated for ${markets.length} markets`);
   }
   const client = anthropic();
-  const model = opts.model ?? VERIFIER_MODEL;
+  const model = VERIFIER_MODEL;
 
   const requests = await mapWithConcurrency(markets, VERIFIER_CONTEXT_CONCURRENCY, async (m) => ({
     custom_id: m.id,
@@ -281,13 +276,7 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
   const stream = await client.messages.batches.results(anthropicBatchId);
   const isVerifier = purpose === VERIFIER_PURPOSE;
   const isObvious = purpose === OBVIOUS_PURPOSE;
-  // Sonnet A/B: same verifier output format + scoring, stored under a non-surfacing pass. Mutations
-  // to market.verifyFailures stay gated on the REAL verifier (isVerifier) so the experiment never
-  // perturbs the live pipeline's failure tracking.
-  const isVerifierExp = purpose === VERIFIER_EXP_PURPOSE;
-  const usesVerifierFormat = isVerifier || isVerifierExp;
-  const pass: "haiku" | "opus" | "obvious" | "sonnet_exp" = isObvious ? "obvious" : isVerifierExp ? "sonnet_exp" : isVerifier ? "opus" : "haiku";
-  const computeEdgePass: "haiku" | "opus" = usesVerifierFormat ? "opus" : "haiku";
+  const pass: "haiku" | "opus" | "obvious" = isObvious ? "obvious" : isVerifier ? "opus" : "haiku";
 
   let succeeded = 0;
   let failed = 0;
@@ -310,10 +299,10 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
 
     const message = entry.result.message;
     const usage = extractUsage(message.usage);
-    const model = message.model || (usesVerifierFormat || isObvious ? VERIFIER_MODEL : HAIKU_MODEL);
+    const model = message.model || (isVerifier || isObvious ? VERIFIER_MODEL : HAIKU_MODEL);
 
     let webSearches = 0;
-    if (usesVerifierFormat || isObvious) {
+    if (isVerifier || isObvious) {
       for (const c of message.content) {
         const anyC = c as unknown as { type?: string; name?: string };
         if (anyC.type === "server_tool_use" && anyC.name === "web_search") webSearches++;
@@ -433,7 +422,7 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
     let parsed;
     let sourceFindings: string | null = null;
 
-    if (usesVerifierFormat) {
+    if (isVerifier) {
       const parts = fullText.split(/---\s*JSON\s*---/i);
       let jsonText: string;
       if (parts.length >= 2) {
@@ -448,7 +437,7 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
         parsed = AnalysisSchema.parse(tryParseJson(jsonText));
       } catch (e) {
         failed++;
-        if (isVerifier) await prisma.market.update({ where: { id: market.id }, data: { verifyFailures: { increment: 1 } } });
+        await prisma.market.update({ where: { id: market.id }, data: { verifyFailures: { increment: 1 } } });
         console.error(`[batch ${anthropicBatchId}] verifier parse fail ${marketId}:`, String(e).slice(0, 200));
         continue;
       }
@@ -471,7 +460,7 @@ async function ingestBatchResults(jobId: string, anthropicBatchId: string, purpo
       ruleImpliedProbability: parsed.rule_implied_probability,
       expectedYesPayoutCents: parsed.expected_yes_payout_cents,
       expectedNoPayoutCents: parsed.expected_no_payout_cents,
-      pass: computeEdgePass,
+      pass: pass as "haiku" | "opus",
     });
 
     await prisma.analysis.create({

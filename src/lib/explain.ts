@@ -325,7 +325,7 @@ const MONTH_DAY_PATTERN = /^(January|February|March|April|May|June|July|August|S
  * forward a year — handles Polymarket events that cross calendar boundaries (a "January 5"
  * outcome in a series running through Dec is January next year).
  */
-function parseGroupItemTitleDate(
+export function parseGroupItemTitleDate(
   groupItemTitle: string | null | undefined,
   referenceDate: Date | null
 ): Date | null {

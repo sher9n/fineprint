@@ -10,7 +10,20 @@
  *   - The daily scheduler and batch poller (they short-circuit early)
  * Does NOT affect free read-only polls (Anthropic batch status, OpenAI response retrieve).
  */
+/**
+ * PROJECT FREEZE (deprecation). Fineprint is deprecated and frozen: every outbound LLM call is hard
+ * disabled in code so NO pass can run or bill, in ANY environment, regardless of the LLM_DISABLED env
+ * var. This short-circuits the 05:00 IST scheduler daily run, the batch + deep-research polls, every
+ * manual trigger route (cron/run, analyze, admin/run-verifier-pool, per-market analyze + deep-research),
+ * and all library submitters (first-pass, Opus verifier, obvious, GPT deep-research, synthesis).
+ *
+ * To revive the project: set PROJECT_FROZEN to false and redeploy. The per-environment LLM_DISABLED
+ * env var then governs again. Also remove the deprecation banner in src/components/AppShell.tsx.
+ */
+export const PROJECT_FROZEN = true;
+
 export function llmCallsEnabled(): boolean {
+  if (PROJECT_FROZEN) return false;
   const v = (process.env.LLM_DISABLED ?? "").trim().toLowerCase();
   return !(v === "true" || v === "1" || v === "yes");
 }

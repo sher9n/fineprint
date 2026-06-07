@@ -6,7 +6,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useState, type ReactNode, type ComponentType } from "react";
 import {
   Home, Bookmark, Heart, Settings, LogOut, LogIn, X, Wrench,
-  History, SlidersHorizontal, ChevronDown, User as UserIcon, HelpCircle, Info,
+  History, SlidersHorizontal, ChevronDown, User as UserIcon, HelpCircle, Info, ShieldCheck, Layers, AlertTriangle,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { ThemeToggle } from "./ThemeToggle";
@@ -26,6 +26,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)] relative z-[1]">
+      {/* ---------- Deprecation notice (project frozen, see PROJECT_FROZEN in src/lib/llm-gate.ts) ---------- */}
+      <div className="w-full bg-[var(--amber-soft)] border-b border-[var(--border)]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-center gap-2 text-center text-[12.5px] sm:text-[13px] font-semibold text-[var(--amber)]">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>Deprecated. This project is frozen: automated analysis is turned off and no new market scans are running.</span>
+        </div>
+      </div>
+
       {/* ---------- Top bar ---------- */}
       <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--bg-elev)]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
@@ -33,6 +41,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Logo size="md" />
             <nav className="hidden md:flex items-center gap-1">
               <TopLink href="/" label="Today's picks" active={path === "/"} />
+              <TopLink href="/near-certain" label="Near-certain" active={path === "/near-certain"} />
+              <TopLink href="/arbitrage" label="Baskets" active={path === "/arbitrage"} />
               <TopLink href="/how-it-works" label="How it works" active={path === "/how-it-works"} />
             </nav>
           </div>
@@ -108,6 +118,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-[var(--border)] bg-[var(--bg-elev)] pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-stretch justify-around h-16">
           <TabItem href="/" label="Picks" icon={Home} active={path === "/"} />
+          <TabItem href="/near-certain" label="Near-locks" icon={ShieldCheck} active={path === "/near-certain"} />
           {session ? (
             <>
               <TabItem href="/bookmarks" label="Saved" icon={Bookmark} active={path.startsWith("/bookmarks")} />
@@ -137,6 +148,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
             </div>
             <div className="space-y-1">
+              <SheetLink href="/near-certain" label="Near-certain" icon={ShieldCheck} onClose={closeSheet} />
+              <SheetLink href="/arbitrage" label="Baskets" icon={Layers} onClose={closeSheet} />
               <SheetLink href="/votes" label="My votes" icon={Heart} onClose={closeSheet} />
               <SheetLink href="/settings" label="Settings" icon={Settings} onClose={closeSheet} />
               <SheetLink href="/how-it-works" label="How it works" icon={HelpCircle} onClose={closeSheet} />

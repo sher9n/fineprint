@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { PROJECT_FROZEN, llmCallsEnabled } from "@/lib/llm-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,10 @@ export async function GET() {
     buildTime,
     node: process.version,
     runtime: process.env.NEXT_RUNTIME || "nodejs",
+    // Deprecation freeze state: frozen=true means every LLM pass is hard-disabled in code
+    // (see PROJECT_FROZEN in src/lib/llm-gate.ts). llmEnabled is the effective gate result.
+    frozen: PROJECT_FROZEN,
+    llmEnabled: llmCallsEnabled(),
     time: new Date().toISOString(),
   });
 }
